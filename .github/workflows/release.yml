@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create Release Archive
+    runs-on: ubuntu-latest
+    container: ghcr.io/angzarr-io/angzarr-cpp:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure git safe directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Verify version matches tag
+        run: |
+          CMAKE_VERSION=$(grep 'project(angzarr-client VERSION' CMakeLists.txt | sed 's/.*VERSION \([0-9.]*\).*/\1/')
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          if [ "$CMAKE_VERSION" != "$TAG_VERSION" ]; then
+            echo "ERROR: CMakeLists.txt version ($CMAKE_VERSION) does not match tag ($TAG_VERSION)"
+            exit 1
+          fi
+
+      - name: Build
+        run: just build
+
+      - name: Test
+        run: just test
+
+      - name: Create archive
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          just archive $VERSION
+
+      - name: Create release notes
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          cat << 'EOF' > release-notes.md
+          ## C++ Client v${VERSION}
+
+          ### Installation via vcpkg
+
+          Add to your `vcpkg-configuration.json`:
+          ```json
+          {
+            "registries": [
+              {
+                "kind": "git",
+                "repository": "https://github.com/angzarr-io/vcpkg-registry",
+                "baseline": "<commit-sha>",
+                "packages": ["angzarr-client"]
+              }
+            ]
+          }
+          ```
+
+          Then install:
+          ```bash
+          vcpkg install angzarr-client
+          ```
+
+          ### Manual Installation
+
+          Download the source archive and build with CMake:
+          ```bash
+          tar xzf angzarr-client-cpp-${VERSION}.tar.gz
+          cd angzarr-client-cpp-${VERSION}
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+          cmake --install build --prefix /usr/local
+          ```
+          EOF
+
+      # Uncomment when ready to publish
+      # - name: Create GitHub Release
+      #   uses: softprops/action-gh-release@v1
+      #   with:
+      #     body_path: release-notes.md
+      #     files: |
+      #       angzarr-client-cpp-*.tar.gz
+      #       angzarr-client-cpp-*.tar.gz.sha512
+      #     draft: false
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
