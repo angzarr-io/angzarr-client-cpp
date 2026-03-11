@@ -19,4 +19,4 @@ auto client = angzarr::Client::Connect("localhost:50051");
 
 ## License
 
-Apache 2.0
+BSD-3-Clause
