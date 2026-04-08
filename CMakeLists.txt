@@ -16,7 +16,7 @@ find_package(gRPC CONFIG REQUIRED)
 find_package(absl CONFIG REQUIRED)
 
 # Proto generation
-set(PROTO_DIR "${CMAKE_SOURCE_DIR}/../../proto")
+set(PROTO_DIR "${CMAKE_SOURCE_DIR}/angzarr/proto")
 set(PROTO_FILES
     ${PROTO_DIR}/google/api/annotations.proto
     ${PROTO_DIR}/google/api/http.proto
