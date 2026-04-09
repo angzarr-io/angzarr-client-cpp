@@ -11,6 +11,16 @@
 
 namespace angzarr {
 
+// Constants matching Rust proto_ext::constants
+namespace constants {
+    constexpr const char* UNKNOWN_DOMAIN = "unknown";
+    constexpr const char* WILDCARD_DOMAIN = "*";
+    constexpr const char* DEFAULT_EDITION = "angzarr";
+    constexpr const char* META_ANGZARR_DOMAIN = "_angzarr";
+    constexpr const char* PROJECTION_DOMAIN_PREFIX = "_projection";
+    constexpr const char* CORRELATION_ID_HEADER = "x-correlation-id";
+}  // namespace constants
+
 /**
  * Helper functions for working with Angzarr types.
  */
@@ -51,10 +61,14 @@ std::string root_id_hex(const EventBook& book);
 
 /**
  * Calculate the next sequence number from an EventBook.
+ *
+ * Uses the framework-precomputed next_sequence field rather than counting
+ * pages, because snapshots may cause the EventBook to contain only
+ * post-snapshot events — counting pages would give the wrong sequence.
  */
 inline int next_sequence(const EventBook* book) {
-    if (!book || book->pages_size() == 0) return 0;
-    return book->pages_size();
+    if (!book) return 0;
+    return static_cast<int>(book->next_sequence());
 }
 
 /**
