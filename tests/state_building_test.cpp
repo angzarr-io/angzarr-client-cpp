@@ -49,6 +49,7 @@ class StateBuildingTest : public ::testing::Test {
             auto* event = page->mutable_event();
             event->set_type_url("type.googleapis.com/TestEvent");
         }
+        book.set_next_sequence(event_count);
         return book;
     }
 };
