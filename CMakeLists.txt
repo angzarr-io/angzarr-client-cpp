@@ -30,16 +30,11 @@ set(PROTO_FILES
     ${PROTO_DIR}/angzarr/upcaster.proto
     ${PROTO_DIR}/angzarr/meta.proto
     ${PROTO_DIR}/angzarr/cloudevents.proto
-    ${PROTO_DIR}/examples/poker_types.proto
-    ${PROTO_DIR}/examples/player.proto
-    ${PROTO_DIR}/examples/table.proto
-    ${PROTO_DIR}/examples/hand.proto
 )
 
 set(GENERATED_DIR "${CMAKE_BINARY_DIR}/generated")
 file(MAKE_DIRECTORY ${GENERATED_DIR})
 file(MAKE_DIRECTORY ${GENERATED_DIR}/angzarr)
-file(MAKE_DIRECTORY ${GENERATED_DIR}/examples)
 file(MAKE_DIRECTORY ${GENERATED_DIR}/google/api)
 
 # Generate protobuf and gRPC sources
