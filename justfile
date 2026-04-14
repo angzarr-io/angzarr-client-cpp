@@ -60,3 +60,11 @@ archive VERSION:
 
 clean:
     rm -rf "{{ROOT}}/build"
+
+# Check formatting
+fmt:
+    just _container fmt
+
+# Auto-format code
+fmt-fix:
+    just _container fmt-fix
