@@ -88,15 +88,6 @@ class MockSagaHandler : public SagaDomainHandler {
         return {"OrderCreated", "OrderCancelled"};
     }
 
-    std::vector<Cover> prepare(const EventBook& source,
-                               const google::protobuf::Any& event) override {
-        prepare_called_ = true;
-        Cover cover;
-        cover.set_domain("fulfillment");
-        cover.mutable_root()->set_value("dest-123");
-        return {cover};
-    }
-
     SagaHandlerResponse execute(const EventBook& source, const google::protobuf::Any& event,
                                 const std::vector<EventBook>& destinations) override {
         execute_called_ = true;
@@ -114,7 +105,6 @@ class MockSagaHandler : public SagaDomainHandler {
     }
 
     // Test inspection
-    bool prepare_called_ = false;
     bool execute_called_ = false;
     int destinations_count_ = 0;
 };
@@ -454,7 +444,7 @@ class SagaRouterTest : public ::testing::Test {
 
 TEST_F(SagaRouterTest, Construction_ShouldSetNameAndDomain) {
     // When I create a SagaRouter
-    SagaRouter<MockSagaHandler> router("saga-order-fulfillment", "order", MockSagaHandler());
+    SagaRouter<MockSagaHandler> router("saga-order-fulfillment", "order", "fulfillment", MockSagaHandler());
 
     // Then name and domain should be set
     EXPECT_EQ(router.name(), "saga-order-fulfillment");
@@ -463,7 +453,7 @@ TEST_F(SagaRouterTest, Construction_ShouldSetNameAndDomain) {
 
 TEST_F(SagaRouterTest, EventTypes_ShouldDelegateToHandler) {
     // Given a SagaRouter
-    SagaRouter<MockSagaHandler> router("saga-order-fulfillment", "order", MockSagaHandler());
+    SagaRouter<MockSagaHandler> router("saga-order-fulfillment", "order", "fulfillment", MockSagaHandler());
 
     // When I get event types
     auto types = router.event_types();
@@ -476,7 +466,7 @@ TEST_F(SagaRouterTest, EventTypes_ShouldDelegateToHandler) {
 
 TEST_F(SagaRouterTest, Subscriptions_ShouldReturnDomainAndTypes) {
     // Given a SagaRouter
-    SagaRouter<MockSagaHandler> router("saga-order-fulfillment", "order", MockSagaHandler());
+    SagaRouter<MockSagaHandler> router("saga-order-fulfillment", "order", "fulfillment", MockSagaHandler());
 
     // When I get subscriptions
     auto subs = router.subscriptions();
@@ -489,7 +479,7 @@ TEST_F(SagaRouterTest, Subscriptions_ShouldReturnDomainAndTypes) {
 
 TEST_F(SagaRouterTest, Descriptor_ShouldBuildCorrectDescriptor) {
     // Given a SagaRouter
-    SagaRouter<MockSagaHandler> router("saga-order-fulfillment", "order", MockSagaHandler());
+    SagaRouter<MockSagaHandler> router("saga-order-fulfillment", "order", "fulfillment", MockSagaHandler());
 
     // When I get descriptor
     auto desc = router.descriptor();
@@ -500,33 +490,9 @@ TEST_F(SagaRouterTest, Descriptor_ShouldBuildCorrectDescriptor) {
     EXPECT_EQ(desc.inputs.size(), 1);
 }
 
-TEST_F(SagaRouterTest, PrepareDestinations_ValidEvent_ShouldReturnCovers) {
-    // Given a SagaRouter with mock handler
-    SagaRouter<MockSagaHandler> router("saga-order-fulfillment", "order", MockSagaHandler());
-
-    // When I prepare destinations for valid event
-    auto book = make_event_book("order", "OrderCreated");
-    auto covers = router.prepare_destinations(&book);
-
-    // Then covers should be returned
-    EXPECT_EQ(covers.size(), 1);
-    EXPECT_EQ(covers[0].domain(), "fulfillment");
-}
-
-TEST_F(SagaRouterTest, PrepareDestinations_NullSource_ShouldReturnEmpty) {
-    // Given a SagaRouter
-    SagaRouter<MockSagaHandler> router("saga-order-fulfillment", "order", MockSagaHandler());
-
-    // When I prepare destinations with null source
-    auto covers = router.prepare_destinations(nullptr);
-
-    // Then empty vector should be returned
-    EXPECT_TRUE(covers.empty());
-}
-
 TEST_F(SagaRouterTest, Dispatch_ValidEvent_ShouldReturnCommands) {
     // Given a SagaRouter with mock handler
-    SagaRouter<MockSagaHandler> router("saga-order-fulfillment", "order", MockSagaHandler());
+    SagaRouter<MockSagaHandler> router("saga-order-fulfillment", "order", "fulfillment", MockSagaHandler());
 
     // When I dispatch an event
     auto book = make_event_book("order", "OrderCreated");
@@ -539,7 +505,7 @@ TEST_F(SagaRouterTest, Dispatch_ValidEvent_ShouldReturnCommands) {
 
 TEST_F(SagaRouterTest, Dispatch_EmptyEventBook_ShouldThrow) {
     // Given a SagaRouter
-    SagaRouter<MockSagaHandler> router("saga-order-fulfillment", "order", MockSagaHandler());
+    SagaRouter<MockSagaHandler> router("saga-order-fulfillment", "order", "fulfillment", MockSagaHandler());
 
     // When I dispatch empty event book
     EventBook book;
@@ -807,9 +773,10 @@ TEST(FactoryFunctions, MakeAggregateRouter_ShouldCreateRouter) {
 }
 
 TEST(FactoryFunctions, MakeSagaRouter_ShouldCreateRouter) {
-    auto router = make_saga_router("saga-order-fulfillment", "order", MockSagaHandler());
+    auto router = make_saga_router("saga-order-fulfillment", "order", "fulfillment", MockSagaHandler());
     EXPECT_EQ(router.name(), "saga-order-fulfillment");
     EXPECT_EQ(router.input_domain(), "order");
+    EXPECT_EQ(router.target_domain(), "fulfillment");
 }
 
 TEST(FactoryFunctions, MakePmRouter_ShouldCreateRouter) {
