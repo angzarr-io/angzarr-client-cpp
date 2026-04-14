@@ -352,6 +352,27 @@ TEST_F(AggregateRouterTest, Descriptor_ShouldBuildCorrectDescriptor) {
     EXPECT_TRUE(desc.inputs.count("order") > 0);
 }
 
+TEST_F(AggregateRouterTest, HandleFact_DefaultIsPassThrough) {
+    // Given a handler with default handle_fact
+    MockAggregateHandler handler;
+
+    // And some facts
+    EventBook facts;
+    facts.mutable_cover()->set_domain("test");
+    auto* page = facts.add_pages();
+    page->mutable_header()->set_sequence(1);
+    page->mutable_event()->set_type_url("type.googleapis.com/test.FactEvent");
+
+    TestState state;
+
+    // When I call handle_fact with default implementation
+    auto result = handler.handle_fact(facts, state);
+
+    // Then it should return the facts unchanged
+    EXPECT_EQ(result.pages_size(), 1);
+    EXPECT_EQ(result.pages(0).event().type_url(), "type.googleapis.com/test.FactEvent");
+}
+
 TEST_F(AggregateRouterTest, Dispatch_ValidCommand_ShouldReturnEvents) {
     // Given an AggregateRouter with mock handler
     MockAggregateHandler handler;
