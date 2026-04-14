@@ -107,6 +107,14 @@ class CommandBuilder {
      * @param message The protobuf command message
      * @return Reference to this builder for chaining
      */
+    /**
+     * Set the merge strategy for conflict resolution.
+     */
+    CommandBuilder& with_merge_strategy(MergeStrategy strategy) {
+        merge_strategy_ = strategy;
+        return *this;
+    }
+
     template <typename T>
     CommandBuilder& with_command(const std::string& type_url, const T& message) {
         type_url_ = type_url;
@@ -141,6 +149,7 @@ class CommandBuilder {
 
         auto* page = book.add_pages();
         page->mutable_header()->set_sequence(sequence_);
+        page->set_merge_strategy(merge_strategy_);
         auto* cmd = page->mutable_command();
         cmd->set_type_url(type_url_.value());
         cmd->set_value(payload_.value());
@@ -166,6 +175,7 @@ class CommandBuilder {
     std::optional<std::string> root_;
     std::optional<std::string> correlation_id_;
     uint32_t sequence_;
+    MergeStrategy merge_strategy_ = MERGE_COMMUTATIVE;
     std::optional<std::string> type_url_;
     std::optional<std::string> payload_;
 
