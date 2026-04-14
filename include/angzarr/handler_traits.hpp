@@ -299,6 +299,16 @@ class CommandHandlerDomainHandler {
     }
 
     /**
+     * Handle injected facts and return the resulting EventBook.
+     *
+     * Facts are always accepted (cannot be rejected). Override to emit
+     * additional events or augment facts. Default: pass-through.
+     */
+    virtual EventBook handle_fact(const EventBook& facts, const S& state) {
+        return facts;
+    }
+
+    /**
      * Handle a command and return resulting events.
      *
      * The handler should dispatch internally based on `payload.type_url`.
