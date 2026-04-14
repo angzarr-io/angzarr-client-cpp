@@ -1,4 +1,4 @@
-#include "angzarr/unified_router.hpp"
+#include "angzarr/component_router.hpp"
 
 #include <google/protobuf/any.pb.h>
 #include <gtest/gtest.h>

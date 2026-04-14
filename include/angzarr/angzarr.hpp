@@ -26,7 +26,7 @@
 
 // Unified router pattern (trait-based)
 #include "handler_traits.hpp"
-#include "unified_router.hpp"
+#include "component_router.hpp"
 
 // OO base classes with macro registration
 #include "command_handler.hpp"
