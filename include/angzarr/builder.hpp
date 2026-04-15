@@ -95,6 +95,7 @@ class CommandBuilder {
      */
     CommandBuilder& with_sequence(uint32_t seq) {
         sequence_ = seq;
+        sequence_set_ = true;
         return *this;
     }
 
@@ -134,6 +135,9 @@ class CommandBuilder {
         }
         if (!payload_.has_value()) {
             throw InvalidArgumentError("command payload not set");
+        }
+        if (!sequence_set_) {
+            throw InvalidArgumentError("sequence not set (call with_sequence)");
         }
 
         std::string corr_id = correlation_id_.value_or(generate_uuid());
@@ -175,6 +179,7 @@ class CommandBuilder {
     std::optional<std::string> root_;
     std::optional<std::string> correlation_id_;
     uint32_t sequence_;
+    bool sequence_set_ = false;
     MergeStrategy merge_strategy_ = MERGE_COMMUTATIVE;
     std::optional<std::string> type_url_;
     std::optional<std::string> payload_;

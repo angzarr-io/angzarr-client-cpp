@@ -12,6 +12,7 @@
 #include "angzarr/query.pb.h"
 #include "angzarr/types.pb.h"
 #include "errors.hpp"
+#include "retry.hpp"
 
 namespace angzarr {
 
@@ -42,8 +43,16 @@ class QueryClient {
      * @throws ConnectionError if connection fails
      */
     static std::unique_ptr<QueryClient> connect(const std::string& endpoint) {
-        auto channel =
-            grpc::CreateChannel(format_endpoint(endpoint), grpc::InsecureChannelCredentials());
+        return connect(endpoint, default_retry_policy());
+    }
+
+    static std::unique_ptr<QueryClient> connect(const std::string& endpoint,
+                                                std::unique_ptr<RetryPolicy> retry) {
+        std::shared_ptr<grpc::Channel> channel;
+        retry->execute([&]() {
+            channel =
+                grpc::CreateChannel(format_endpoint(endpoint), grpc::InsecureChannelCredentials());
+        });
         return std::make_unique<QueryClient>(channel);
     }
 
@@ -152,8 +161,16 @@ class CommandHandlerClient {
      * @throws ConnectionError if connection fails
      */
     static std::unique_ptr<CommandHandlerClient> connect(const std::string& endpoint) {
-        auto channel =
-            grpc::CreateChannel(format_endpoint(endpoint), grpc::InsecureChannelCredentials());
+        return connect(endpoint, default_retry_policy());
+    }
+
+    static std::unique_ptr<CommandHandlerClient> connect(const std::string& endpoint,
+                                                         std::unique_ptr<RetryPolicy> retry) {
+        std::shared_ptr<grpc::Channel> channel;
+        retry->execute([&]() {
+            channel =
+                grpc::CreateChannel(format_endpoint(endpoint), grpc::InsecureChannelCredentials());
+        });
         return std::make_unique<CommandHandlerClient>(channel);
     }
 
@@ -191,7 +208,8 @@ class CommandHandlerClient {
     CommandResponse handle(const CommandBook& command) {
         CommandRequest request;
         *request.mutable_command() = command;
-        request.set_sync_mode(SYNC_MODE_ASYNC);  // Async (fire-and-forget)
+        request.set_sync_mode(SYNC_MODE_ASYNC);
+        request.set_cascade_error_mode(CASCADE_ERROR_FAIL_FAST);
 
         CommandResponse response;
         grpc::ClientContext context;

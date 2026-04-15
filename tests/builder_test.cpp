@@ -56,7 +56,8 @@ TEST_F(CommandBuilderTest, Build_WithoutCorrelationId_ShouldAutoGenerateOne) {
     test_msg.set_type_url("type.googleapis.com/test.TestCommand");
 
     CommandBuilder builder(nullptr, "test");
-    builder.with_command("type.googleapis.com/test.TestCommand", test_msg);
+    builder.with_sequence(0)
+        .with_command("type.googleapis.com/test.TestCommand", test_msg);
 
     auto command = builder.build();
 
@@ -72,7 +73,8 @@ TEST_F(CommandBuilderTest, Build_ForNewAggregate_ShouldHaveNoRootUUID) {
     test_msg.set_type_url("type.googleapis.com/test.TestCommand");
 
     CommandBuilder builder(nullptr, "test");
-    builder.with_command("type.googleapis.com/test.TestCommand", test_msg);
+    builder.with_sequence(0)
+        .with_command("type.googleapis.com/test.TestCommand", test_msg);
 
     auto command = builder.build();
 
@@ -80,13 +82,26 @@ TEST_F(CommandBuilderTest, Build_ForNewAggregate_ShouldHaveNoRootUUID) {
     EXPECT_FALSE(command.cover().has_root());
 }
 
-TEST_F(CommandBuilderTest, Build_WithoutSequence_ShouldDefaultToZero) {
-    // When I build a command without specifying sequence
+TEST_F(CommandBuilderTest, Build_WithoutSequence_ShouldThrow) {
+    // When I build a command without calling with_sequence()
     google::protobuf::Any test_msg;
     test_msg.set_type_url("type.googleapis.com/test.TestCommand");
 
     CommandBuilder builder(nullptr, "test");
     builder.with_command("type.googleapis.com/test.TestCommand", test_msg);
+
+    // Then build should throw InvalidArgumentError
+    EXPECT_THROW(builder.build(), angzarr::InvalidArgumentError);
+}
+
+TEST_F(CommandBuilderTest, Build_WithSequenceZero_ShouldSucceed) {
+    // When I explicitly set sequence to 0 (valid for new aggregates)
+    google::protobuf::Any test_msg;
+    test_msg.set_type_url("type.googleapis.com/test.TestCommand");
+
+    CommandBuilder builder(nullptr, "test");
+    builder.with_sequence(0)
+        .with_command("type.googleapis.com/test.TestCommand", test_msg);
 
     auto command = builder.build();
 
