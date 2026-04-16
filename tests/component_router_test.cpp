@@ -89,9 +89,9 @@ class MockSagaHandler : public SagaDomainHandler {
     }
 
     SagaHandlerResponse execute(const EventBook& source, const google::protobuf::Any& event,
-                                const std::vector<EventBook>& destinations) override {
+                                const Destinations& destinations) override {
         execute_called_ = true;
-        destinations_count_ = static_cast<int>(destinations.size());
+        destinations_count_ = static_cast<int>(destinations.domains().size());
 
         CommandBook cmd;
         auto* cover = cmd.mutable_cover();
@@ -121,7 +121,7 @@ class MockPmHandler : public ProcessManagerDomainHandler<TestState> {
 
     ProcessManagerResponse handle(const EventBook& trigger, const TestState& state,
                                   const google::protobuf::Any& event,
-                                  const std::vector<EventBook>& destinations) override {
+                                  const Destinations& destinations) override {
         handle_called_ = true;
         last_state_ = state;
 
@@ -496,7 +496,7 @@ TEST_F(SagaRouterTest, Dispatch_ValidEvent_ShouldReturnCommands) {
 
     // When I dispatch an event
     auto book = make_event_book("order", "OrderCreated");
-    auto response = router.dispatch(book, {});
+    auto response = router.dispatch(book, Destinations{});
 
     // Then commands should be returned
     EXPECT_EQ(response.commands_size(), 1);
@@ -511,7 +511,7 @@ TEST_F(SagaRouterTest, Dispatch_EmptyEventBook_ShouldThrow) {
     EventBook book;
 
     // Then it should throw
-    EXPECT_THROW(router.dispatch(book, {}), InvalidArgumentError);
+    EXPECT_THROW(router.dispatch(book, Destinations{}), InvalidArgumentError);
 }
 
 // =============================================================================

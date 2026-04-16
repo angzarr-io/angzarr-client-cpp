@@ -132,7 +132,7 @@ class CloudEventsRouter {
      */
     template <typename T>
     CloudEventsRouter& on(CloudEventsHandler<T> handler) {
-        std::string suffix = T::descriptor()->name();
+        std::string suffix = T::descriptor()->full_name();
         handlers_[suffix] = [handler = std::move(handler)](
                                 const google::protobuf::Any& any) -> std::optional<CloudEvent> {
             T event;

@@ -21,6 +21,9 @@
 // Registration macros
 #include "macros.hpp"
 
+// Destination sequences for command stamping
+#include "destinations.hpp"
+
 // Functional router pattern
 #include "router.hpp"
 

@@ -33,7 +33,7 @@ inline void require_not_exists(bool exists,
 template <typename T>
 void require_positive(T value, const std::string& field_name = "value") {
     if (value <= 0) {
-        throw CommandRejectedError(field_name + " must be positive");
+        throw CommandRejectedError::invalid_argument(field_name + " must be positive");
     }
 }
 
@@ -43,7 +43,7 @@ void require_positive(T value, const std::string& field_name = "value") {
 template <typename T>
 void require_non_negative(T value, const std::string& field_name = "value") {
     if (value < 0) {
-        throw CommandRejectedError(field_name + " must be non-negative");
+        throw CommandRejectedError::invalid_argument(field_name + " must be non-negative");
     }
 }
 
@@ -52,7 +52,7 @@ void require_non_negative(T value, const std::string& field_name = "value") {
  */
 inline void require_not_empty(const std::string& value, const std::string& field_name = "value") {
     if (value.empty()) {
-        throw CommandRejectedError(field_name + " must not be empty");
+        throw CommandRejectedError::invalid_argument(field_name + " must not be empty");
     }
 }
 
@@ -63,7 +63,7 @@ template <typename T>
 void require_not_empty(const std::vector<T>& collection,
                        const std::string& field_name = "collection") {
     if (collection.empty()) {
-        throw CommandRejectedError(field_name + " must not be empty");
+        throw CommandRejectedError::invalid_argument(field_name + " must not be empty");
     }
 }
 

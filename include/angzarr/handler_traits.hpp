@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "angzarr/types.pb.h"
+#include "destinations.hpp"
 #include "errors.hpp"
 
 namespace angzarr {
@@ -27,7 +28,7 @@ namespace handler_traits {
  */
 template <typename T>
 std::string type_suffix() {
-    return T::descriptor()->name();
+    return T::descriptor()->full_name();
 }
 
 }  // namespace handler_traits
@@ -184,7 +185,7 @@ class StateRouter {
      */
     template <typename Event>
     StateRouter& on(std::function<void(S&, const Event&)> applier) {
-        std::string suffix = Event::descriptor()->name();
+        std::string suffix = Event::descriptor()->full_name();
         appliers_[suffix] = [applier](S& state, const google::protobuf::Any& any) {
             Event event;
             any.UnpackTo(&event);
@@ -211,18 +212,12 @@ class StateRouter {
      * Apply a single event to existing state.
      */
     void apply_single(S& state, const google::protobuf::Any& event_any) const {
-        // Extract type name from URL (e.g., "type.googleapis.com/examples.CardsDealt" ->
-        // "CardsDealt")
+        // Extract fully-qualified type name from URL
+        // e.g., "type.googleapis.com/examples.CardsDealt" -> "examples.CardsDealt"
         const std::string& type_url = event_any.type_url();
-        auto pos = type_url.rfind('/');
-        std::string full_name = (pos != std::string::npos) ? type_url.substr(pos + 1) : type_url;
+        auto full_name = helpers::type_name_from_url(type_url);
 
-        // Extract simple name (e.g., "examples.CardsDealt" -> "CardsDealt")
-        auto dot_pos = full_name.rfind('.');
-        std::string simple_name =
-            (dot_pos != std::string::npos) ? full_name.substr(dot_pos + 1) : full_name;
-
-        auto it = appliers_.find(simple_name);
+        auto it = appliers_.find(full_name);
         if (it != appliers_.end()) {
             it->second(state, event_any);
         }
@@ -368,7 +363,7 @@ class CommandHandlerDomainHandler {
  *
  *       SagaHandlerResponse execute(const EventBook& source,
  *                                   const google::protobuf::Any& event,
- *                                   const std::vector<EventBook>& destinations) override {
+ *                                   const Destinations& destinations) override {
  *           // Transform event into commands and/or events
  *           return SagaHandlerResponse::with_commands({...});
  *       }
@@ -398,7 +393,7 @@ class SagaDomainHandler {
      * @throws CommandRejectedError if execution fails
      */
     virtual SagaHandlerResponse execute(const EventBook& source, const google::protobuf::Any& event,
-                                        const std::vector<EventBook>& destinations) = 0;
+                                        const Destinations& destinations) = 0;
 
     /**
      * Handle a rejection notification.
@@ -454,7 +449,7 @@ class SagaDomainHandler {
  *       ProcessManagerResponse handle(const EventBook& trigger,
  *                                     const HandFlowState& state,
  *                                     const google::protobuf::Any& event,
- *                                     const std::vector<EventBook>& destinations) override {
+ *                                     const Destinations& destinations) override {
  *           // Process event, emit commands and/or PM events
  *           return ProcessManagerResponse::empty();
  *       }
@@ -494,7 +489,7 @@ class ProcessManagerDomainHandler {
      */
     virtual ProcessManagerResponse handle(const EventBook& trigger, const S& state,
                                           const google::protobuf::Any& event,
-                                          const std::vector<EventBook>& destinations) = 0;
+                                          const Destinations& destinations) = 0;
 
     /**
      * Handle a rejection notification.

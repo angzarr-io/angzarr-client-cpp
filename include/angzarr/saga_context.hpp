@@ -11,6 +11,11 @@ namespace angzarr {
 /**
  * Context for saga handlers, providing access to destination aggregate state.
  *
+ * @deprecated Use Destinations instead. Destinations provides domain-level
+ * sequence access via destination_sequences from the gRPC request, rather than
+ * requiring full EventBook state. Sagas should stamp commands with sequences
+ * and let aggregates make business decisions.
+ *
  * Used in the splitter pattern where one event triggers commands to multiple aggregates.
  * Provides sequence number lookup for optimistic concurrency control.
  *
@@ -29,7 +34,7 @@ namespace angzarr {
  * }
  * @endcode
  */
-class SagaContext {
+class [[deprecated("Use Destinations instead")]] SagaContext {
    public:
     /**
      * Create a context from a list of destination EventBooks.
