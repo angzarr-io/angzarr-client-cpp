@@ -45,7 +45,7 @@ mutation-test:
         -DCMAKE_CXX_COMPILER=clang++-17 \
         -DCMAKE_CXX_FLAGS="-g -grecord-command-line -w"
     cmake --build build-mull -j$(nproc) --target mutation_tests
-    $MULL build-mull/mutation_tests
+    $MULL --strict false --reporters Elements build-mull/mutation_tests
     echo "Mutation testing complete."
 
 # Create release archive with checksums
