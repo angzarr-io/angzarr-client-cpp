@@ -11,6 +11,7 @@
 #include "angzarr/types.pb.h"
 #include "destinations.hpp"
 #include "errors.hpp"
+#include "helpers.hpp"
 
 namespace angzarr {
 
