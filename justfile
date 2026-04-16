@@ -54,6 +54,9 @@ test:
 serve:
     just _container serve
 
+mutation-test:
+    just _container mutation-test
+
 # Create release archive
 archive VERSION:
     just _container archive {{VERSION}}

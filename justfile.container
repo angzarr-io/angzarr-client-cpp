@@ -30,6 +30,24 @@ fmt:
 fmt-fix:
     find src include -name "*.cpp" -o -name "*.hpp" | xargs clang-format -i --style=Google
 
+# Run Mull mutation testing on combined test binary
+mutation-test:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    MULL=$(command -v mull-runner-17 2>/dev/null || command -v mull-runner 2>/dev/null)
+    if [ -z "$MULL" ]; then
+        echo "ERROR: mull-runner not found. Use the angzarr-cpp:latest base image."
+        exit 1
+    fi
+    echo "Running Mull mutation testing ($($MULL --version 2>&1 | head -1))..."
+    # Build with clang-17 + debug info so mull can read LLVM IR
+    cmake -B build-mull -DCMAKE_C_COMPILER=clang-17 \
+        -DCMAKE_CXX_COMPILER=clang++-17 \
+        -DCMAKE_CXX_FLAGS="-g -grecord-command-line -w"
+    cmake --build build-mull -j$(nproc) --target mutation_tests
+    $MULL build-mull/mutation_tests
+    echo "Mutation testing complete."
+
 # Create release archive with checksums
 archive VERSION:
     cd {{ROOT}} && git archive --format=tar.gz --prefix=angzarr-client-cpp-{{VERSION}}/ -o client/cpp/angzarr-client-cpp-{{VERSION}}.tar.gz HEAD:client/cpp
