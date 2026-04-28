@@ -78,7 +78,15 @@ class GrpcError : public ClientError {
     GrpcError(const std::string& message, grpc::StatusCode status_code)
         : ClientError(message), status_code_(status_code) {}
 
+    GrpcError(const grpc::Status& status)
+        : ClientError(status.error_message()),
+          status_code_(status.error_code()),
+          status_(status) {}
+
     grpc::StatusCode status_code() const { return status_code_; }
+
+    /// Get the original gRPC Status (if available).
+    const grpc::Status& status() const { return status_; }
 
     bool is_not_found() const override { return status_code_ == grpc::StatusCode::NOT_FOUND; }
 
@@ -96,6 +104,7 @@ class GrpcError : public ClientError {
 
    private:
     grpc::StatusCode status_code_;
+    grpc::Status status_;
 };
 
 /**

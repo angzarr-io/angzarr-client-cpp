@@ -476,4 +476,71 @@ class QueryBuilder {
     }
 };
 
+// --- Convenience builder methods on client classes ---
+// Defined here (not in client.hpp) to avoid circular include.
+
+/**
+ * Start building a command for an existing aggregate.
+ *
+ * @param domain The aggregate domain
+ * @param root_bytes UUID as raw bytes
+ * @return A CommandBuilder ready for chaining
+ */
+inline CommandBuilder CommandHandlerClient::command(const std::string& domain,
+                                                    const std::string& root_bytes) {
+    return CommandBuilder(this, domain).with_root(root_bytes);
+}
+
+/**
+ * Start building a command for a new aggregate.
+ *
+ * @param domain The aggregate domain
+ * @return A CommandBuilder ready for chaining
+ */
+inline CommandBuilder CommandHandlerClient::command_new(const std::string& domain) {
+    return CommandBuilder(this, domain);
+}
+
+/**
+ * Start building a query for a specific aggregate.
+ *
+ * @param domain The aggregate domain
+ * @param root_bytes UUID as raw bytes
+ * @return A QueryBuilder ready for chaining
+ */
+inline QueryBuilder QueryClient::query(const std::string& domain,
+                                       const std::string& root_bytes) {
+    return QueryBuilder(this, domain).with_root(root_bytes);
+}
+
+/**
+ * Start building a query by domain only (use with by_correlation_id).
+ *
+ * @param domain The aggregate domain
+ * @return A QueryBuilder ready for chaining
+ */
+inline QueryBuilder QueryClient::query_domain(const std::string& domain) {
+    return QueryBuilder(this, domain);
+}
+
+// --- DomainClient convenience methods ---
+
+inline CommandBuilder DomainClient::command(const std::string& domain,
+                                            const std::string& root_bytes) {
+    return command_handler_->command(domain, root_bytes);
+}
+
+inline CommandBuilder DomainClient::command_new(const std::string& domain) {
+    return command_handler_->command_new(domain);
+}
+
+inline QueryBuilder DomainClient::query_events(const std::string& domain,
+                                               const std::string& root_bytes) {
+    return query_->query(domain, root_bytes);
+}
+
+inline QueryBuilder DomainClient::query_domain(const std::string& domain) {
+    return query_->query_domain(domain);
+}
+
 }  // namespace angzarr

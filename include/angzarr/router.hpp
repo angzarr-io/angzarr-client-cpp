@@ -52,7 +52,7 @@ class CommandRouter {
      */
     template <typename Command, typename Event>
     CommandRouter& on(std::function<Event(const Command&, const State&)> handler) {
-        std::string suffix = Command::descriptor()->name();
+        std::string suffix = Command::descriptor()->full_name();
         handlers_.emplace_back(
             suffix,
             [handler](const CommandBook& cmd_book, const google::protobuf::Any& cmd_any,

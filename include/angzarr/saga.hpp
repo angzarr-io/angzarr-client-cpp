@@ -10,6 +10,7 @@
 #include "angzarr/saga.pb.h"
 #include "angzarr/types.pb.h"
 #include "descriptor.hpp"
+#include "destinations.hpp"
 #include "errors.hpp"
 #include "helpers.hpp"
 #include "router.hpp"
@@ -97,7 +98,7 @@ class Saga {
      * Returns commands and any facts emitted via emit_fact().
      */
     DispatchResult dispatch(const EventBook& book,
-                            const std::vector<EventBook>& destinations = {}) {
+                            const Destinations& destinations = Destinations{}) {
         clear_facts();
         auto correlation_id = book.has_cover() ? book.cover().correlation_id() : "";
 

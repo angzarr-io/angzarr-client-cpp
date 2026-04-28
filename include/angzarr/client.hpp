@@ -8,13 +8,50 @@
 
 #include "angzarr/command_handler.grpc.pb.h"
 #include "angzarr/command_handler.pb.h"
+#include "angzarr/process_manager.grpc.pb.h"
+#include "angzarr/process_manager.pb.h"
+#include "angzarr/projector.grpc.pb.h"
+#include "angzarr/projector.pb.h"
 #include "angzarr/query.grpc.pb.h"
 #include "angzarr/query.pb.h"
+#include "angzarr/saga.grpc.pb.h"
+#include "angzarr/saga.pb.h"
 #include "angzarr/types.pb.h"
 #include "errors.hpp"
 #include "retry.hpp"
 
 namespace angzarr {
+
+// Forward declarations for builder convenience methods (defined in builder.hpp).
+class CommandBuilder;
+class QueryBuilder;
+
+namespace detail {
+/// Format endpoint for gRPC channel creation.
+/// Detects Unix Domain Socket paths and converts to unix:// URI format.
+/// Passes TCP endpoints through unchanged.
+inline std::string format_endpoint(const std::string& endpoint) {
+    // UDS: absolute path
+    if (!endpoint.empty() && endpoint[0] == '/') {
+        return "unix://" + endpoint;
+    }
+    // UDS: relative path
+    if (endpoint.size() >= 2 && endpoint[0] == '.' && endpoint[1] == '/') {
+        return "unix://" + endpoint;
+    }
+    // UDS: already in URI format
+    if (endpoint.find("unix://") == 0) {
+        return endpoint;
+    }
+    // TCP: plain host:port (no scheme)
+    if (endpoint.find("://") == std::string::npos) {
+        return endpoint;
+    }
+    // TCP: strip http:// or https:// prefix for gRPC
+    auto pos = endpoint.find("://");
+    return endpoint.substr(pos + 3);
+}
+}  // namespace detail
 
 /**
  * Client for querying aggregate event streams.
@@ -93,7 +130,7 @@ class QueryClient {
         grpc::ClientContext context;
         auto status = stub_->GetEventBook(&context, query, &response);
         if (!status.ok()) {
-            throw GrpcError(status.error_message(), status.error_code());
+            throw GrpcError(status);
         }
         return response;
     }
@@ -117,21 +154,22 @@ class QueryClient {
         }
         auto status = reader->Finish();
         if (!status.ok()) {
-            throw GrpcError(status.error_message(), status.error_code());
+            throw GrpcError(status);
         }
         return results;
     }
+
+    /// Start building a query for a specific aggregate (defined in builder.hpp).
+    inline QueryBuilder query(const std::string& domain, const std::string& root_bytes);
+
+    /// Start building a query by domain only (defined in builder.hpp).
+    inline QueryBuilder query_domain(const std::string& domain);
 
    private:
     std::unique_ptr<EventQueryService::Stub> stub_;
 
     static std::string format_endpoint(const std::string& endpoint) {
-        if (endpoint.find("://") == std::string::npos) {
-            return endpoint;  // Already plain host:port
-        }
-        // Strip http:// or https:// prefix for gRPC
-        auto pos = endpoint.find("://");
-        return endpoint.substr(pos + 3);
+        return detail::format_endpoint(endpoint);
     }
 };
 
@@ -215,7 +253,7 @@ class CommandHandlerClient {
         grpc::ClientContext context;
         auto status = stub_->HandleCommand(&context, request, &response);
         if (!status.ok()) {
-            throw GrpcError(status.error_message(), status.error_code());
+            throw GrpcError(status);
         }
         return response;
     }
@@ -240,7 +278,7 @@ class CommandHandlerClient {
         grpc::ClientContext context;
         auto status = stub_->HandleCommand(&context, request, &response);
         if (!status.ok()) {
-            throw GrpcError(status.error_message(), status.error_code());
+            throw GrpcError(status);
         }
         return response;
     }
@@ -260,21 +298,116 @@ class CommandHandlerClient {
         grpc::ClientContext context;
         auto status = stub_->HandleSyncSpeculative(&context, request, &response);
         if (!status.ok()) {
-            throw GrpcError(status.error_message(), status.error_code());
+            throw GrpcError(status);
         }
         return response;
     }
+
+    /**
+     * Execute a command with the specified CommandRequest.
+     *
+     * Full-control method accepting a pre-built CommandRequest with custom
+     * sync mode and cascade error mode settings.
+     *
+     * @param request The command request with sync mode and options
+     * @return CommandResponse with resulting events
+     * @throws GrpcError if the gRPC call fails
+     */
+    CommandResponse handle_command(const CommandRequest& request) {
+        CommandResponse response;
+        grpc::ClientContext context;
+        auto status = stub_->HandleCommand(&context, request, &response);
+        if (!status.ok()) {
+            throw GrpcError(status);
+        }
+        return response;
+    }
+
+    /// Start building a command for an existing aggregate (defined in builder.hpp).
+    inline CommandBuilder command(const std::string& domain, const std::string& root_bytes);
+
+    /// Start building a command for a new aggregate (defined in builder.hpp).
+    inline CommandBuilder command_new(const std::string& domain);
 
    private:
     std::unique_ptr<CommandHandlerCoordinatorService::Stub> stub_;
 
     static std::string format_endpoint(const std::string& endpoint) {
-        if (endpoint.find("://") == std::string::npos) {
-            return endpoint;
-        }
-        auto pos = endpoint.find("://");
-        return endpoint.substr(pos + 3);
+        return detail::format_endpoint(endpoint);
     }
+};
+
+/**
+ * Client for speculative (what-if) execution across coordinator services.
+ *
+ * Speculative execution runs commands/events against temporal state without
+ * persistence. Use for form validation, preview, or testing.
+ */
+class SpeculativeClient {
+   public:
+    static std::unique_ptr<SpeculativeClient> connect(const std::string& endpoint) {
+        auto formatted = detail::format_endpoint(endpoint);
+        auto channel = grpc::CreateChannel(formatted, grpc::InsecureChannelCredentials());
+        return std::make_unique<SpeculativeClient>(channel);
+    }
+
+    static std::unique_ptr<SpeculativeClient> from_env(const std::string& env_var,
+                                                       const std::string& default_endpoint) {
+        const char* endpoint = std::getenv(env_var.c_str());
+        return connect(endpoint ? endpoint : default_endpoint);
+    }
+
+    explicit SpeculativeClient(std::shared_ptr<grpc::Channel> channel)
+        : ch_stub_(CommandHandlerCoordinatorService::NewStub(channel)),
+          projector_stub_(ProjectorCoordinatorService::NewStub(channel)),
+          saga_stub_(SagaCoordinatorService::NewStub(channel)),
+          pm_stub_(ProcessManagerCoordinatorService::NewStub(channel)) {}
+
+    CommandResponse command_handler(const SpeculateCommandHandlerRequest& request) {
+        CommandResponse response;
+        grpc::ClientContext context;
+        auto status = ch_stub_->HandleSyncSpeculative(&context, request, &response);
+        if (!status.ok()) {
+            throw GrpcError(status);
+        }
+        return response;
+    }
+
+    Projection projector(const SpeculateProjectorRequest& request) {
+        Projection response;
+        grpc::ClientContext context;
+        auto status = projector_stub_->HandleSpeculative(&context, request, &response);
+        if (!status.ok()) {
+            throw GrpcError(status);
+        }
+        return response;
+    }
+
+    SagaResponse saga(const SpeculateSagaRequest& request) {
+        SagaResponse response;
+        grpc::ClientContext context;
+        auto status = saga_stub_->ExecuteSpeculative(&context, request, &response);
+        if (!status.ok()) {
+            throw GrpcError(status);
+        }
+        return response;
+    }
+
+    ProcessManagerHandleResponse process_manager(const SpeculatePmRequest& request) {
+        ProcessManagerHandleResponse response;
+        grpc::ClientContext context;
+        auto status = pm_stub_->HandleSpeculative(&context, request, &response);
+        if (!status.ok()) {
+            throw GrpcError(status);
+        }
+        return response;
+    }
+
+   private:
+    std::unique_ptr<CommandHandlerCoordinatorService::Stub> ch_stub_;
+    std::unique_ptr<ProjectorCoordinatorService::Stub> projector_stub_;
+    std::unique_ptr<SagaCoordinatorService::Stub> saga_stub_;
+    std::unique_ptr<ProcessManagerCoordinatorService::Stub> pm_stub_;
 };
 
 /**
@@ -332,7 +465,8 @@ class DomainClient {
      */
     explicit DomainClient(std::shared_ptr<grpc::Channel> channel)
         : command_handler_(std::make_unique<CommandHandlerClient>(channel)),
-          query_(std::make_unique<QueryClient>(channel)) {}
+          query_(std::make_unique<QueryClient>(channel)),
+          speculative_(std::make_unique<SpeculativeClient>(channel)) {}
 
     /**
      * Get the command handler client for command execution.
@@ -345,22 +479,36 @@ class DomainClient {
     QueryClient* query() { return query_.get(); }
 
     /**
+     * Get the speculative client for what-if scenarios.
+     */
+    SpeculativeClient* speculative() { return speculative_.get(); }
+
+    /**
      * Execute a command (convenience method delegating to command handler).
      */
     CommandResponse execute(const CommandBook& command) {
         return command_handler_->handle(command);
     }
 
+    /// Start building a command for an existing aggregate (defined in builder.hpp).
+    inline CommandBuilder command(const std::string& domain, const std::string& root_bytes);
+
+    /// Start building a command for a new aggregate (defined in builder.hpp).
+    inline CommandBuilder command_new(const std::string& domain);
+
+    /// Start building a query for a specific aggregate (defined in builder.hpp).
+    inline QueryBuilder query_events(const std::string& domain, const std::string& root_bytes);
+
+    /// Start building a query by domain only (defined in builder.hpp).
+    inline QueryBuilder query_domain(const std::string& domain);
+
    private:
     std::unique_ptr<CommandHandlerClient> command_handler_;
     std::unique_ptr<QueryClient> query_;
+    std::unique_ptr<SpeculativeClient> speculative_;
 
     static std::string format_endpoint(const std::string& endpoint) {
-        if (endpoint.find("://") == std::string::npos) {
-            return endpoint;
-        }
-        auto pos = endpoint.find("://");
-        return endpoint.substr(pos + 3);
+        return detail::format_endpoint(endpoint);
     }
 };
 

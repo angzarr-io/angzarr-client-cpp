@@ -187,7 +187,7 @@ class CommandHandlerBase {
         const auto& type_url = command_any.type_url();
 
         // Check for Notification (rejection)
-        if (helpers::type_url_matches(type_url, "Notification")) {
+        if (helpers::type_url_matches(type_url, "angzarr.Notification")) {
             Notification notification;
             command_any.UnpackTo(&notification);
             return dispatch_rejection(notification);
@@ -332,7 +332,7 @@ class CommandHandler {
 
         const auto& type_url = command_any.type_url();
 
-        if (helpers::type_url_matches(type_url, "Notification")) {
+        if (helpers::type_url_matches(type_url, "angzarr.Notification")) {
             Notification notification;
             command_any.UnpackTo(&notification);
             return dispatch_rejection(notification);

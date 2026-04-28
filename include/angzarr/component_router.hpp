@@ -15,6 +15,7 @@
 #include "angzarr/saga.pb.h"
 #include "angzarr/types.pb.h"
 #include "descriptor.hpp"
+#include "destinations.hpp"
 #include "errors.hpp"
 #include "handler_traits.hpp"
 #include "helpers.hpp"
@@ -302,12 +303,12 @@ class SagaRouter {
      * Dispatch an event to the saga handler.
      *
      * @param source The source event book
-     * @param destinations Fetched destination event books
+     * @param destinations Destination sequences for command stamping
      * @return SagaResponse with commands
      * @throws InvalidArgumentError if source is malformed
      * @throws CommandRejectedError if execution fails
      */
-    SagaResponse dispatch(const EventBook& source, const std::vector<EventBook>& destinations) {
+    SagaResponse dispatch(const EventBook& source, const Destinations& destinations) {
         if (source.pages_size() == 0) {
             throw InvalidArgumentError("Source event book has no events");
         }
@@ -324,6 +325,19 @@ class SagaRouter {
             *response.add_commands() = std::move(cmd);
         }
         return response;
+    }
+
+    /**
+     * Dispatch an event to the saga handler (legacy overload).
+     *
+     * @deprecated Use the Destinations overload instead.
+     * @param source The source event book
+     * @param destination_sequences Map of domain to next sequence number
+     * @return SagaResponse with commands
+     */
+    SagaResponse dispatch(const EventBook& source,
+                          const std::unordered_map<std::string, uint32_t>& destination_sequences) {
+        return dispatch(source, Destinations(destination_sequences));
     }
 
    private:
@@ -496,7 +510,14 @@ class ProcessManagerRouter {
             return dispatch_notification(it->second.get(), event_any, state);
         }
 
-        auto response = it->second->handle(trigger, state, event_any, destinations);
+        // Convert destination EventBooks to Destinations (domain -> next_sequence map)
+        std::unordered_map<std::string, uint32_t> seq_map;
+        for (const auto& book : destinations) {
+            seq_map[helpers::domain(book)] = static_cast<uint32_t>(helpers::next_sequence(&book));
+        }
+        Destinations dest(std::move(seq_map));
+
+        auto response = it->second->handle(trigger, state, event_any, dest);
 
         ProcessManagerHandleResponse pm_response;
         for (auto& cmd : response.commands) {
