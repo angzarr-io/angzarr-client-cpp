@@ -242,3 +242,21 @@ gtest_discover_tests(router_test)
 gtest_discover_tests(compensation_test)
 gtest_discover_tests(state_building_test)
 gtest_discover_tests(component_router_test)
+
+# Mutation testing binary (all test sources combined for Mull)
+add_executable(mutation_tests
+    tests/rejection_handler_response_test.cpp
+    tests/builder_test.cpp
+    tests/error_introspection_test.cpp
+    tests/router_test.cpp
+    tests/compensation_test.cpp
+    tests/state_building_test.cpp
+    tests/component_router_test.cpp
+)
+
+target_link_libraries(mutation_tests
+    PRIVATE
+        angzarr-client
+        GTest::gtest
+        GTest::gtest_main
+)

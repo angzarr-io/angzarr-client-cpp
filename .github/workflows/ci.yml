@@ -25,7 +25,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake build-essential protobuf-compiler \
             libprotobuf-dev libgrpc++-dev libgtest-dev libgmock-dev \
-            protobuf-compiler-grpc clang-format
+            protobuf-compiler-grpc clang-format clang-17
+
+      - name: Install Mull
+        run: |
+          curl -1sLf 'https://dl.cloudsmith.io/public/mull-project/mull-stable/setup.deb.sh' | sudo -E bash
+          sudo apt-get install -y mull-17
 
       - name: Build
         run: just -f justfile.container build
@@ -36,3 +41,6 @@ jobs:
       - name: Format check
         run: just -f justfile.container fmt
         continue-on-error: true  # TODO: fix existing format violations then remove
+
+      - name: Mutation Testing (Mull)
+        run: just -f justfile.container mutation-test
