@@ -440,13 +440,6 @@ class SagaDomainHandler {
  *           return {"OrderCreated"};
  *       }
  *
- *       std::vector<Cover> prepare(const EventBook& trigger,
- *                                  const HandFlowState& state,
- *                                  const google::protobuf::Any& event) override {
- *           // Declare needed destinations
- *           return {};
- *       }
- *
  *       ProcessManagerResponse handle(const EventBook& trigger,
  *                                     const HandFlowState& state,
  *                                     const google::protobuf::Any& event,
@@ -468,23 +461,12 @@ class ProcessManagerDomainHandler {
     virtual std::vector<std::string> event_types() const = 0;
 
     /**
-     * Prepare phase -- declare destination covers needed.
-     *
-     * @param trigger The triggering event book
-     * @param state The current PM state
-     * @param event The event being processed
-     * @return Covers for destinations to fetch
-     */
-    virtual std::vector<Cover> prepare(const EventBook& trigger, const S& state,
-                                       const google::protobuf::Any& event) = 0;
-
-    /**
      * Handle phase -- produce commands and PM events.
      *
      * @param trigger The triggering event book
      * @param state The current PM state
      * @param event The event being processed
-     * @param destinations Fetched destination event books
+     * @param destinations Destination sequences for command stamping
      * @return Response containing commands and/or PM events
      * @throws CommandRejectedError if handling fails
      */
