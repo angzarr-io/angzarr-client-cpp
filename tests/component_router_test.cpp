@@ -113,12 +113,6 @@ class MockPmHandler : public ProcessManagerDomainHandler<TestState> {
    public:
     std::vector<std::string> event_types() const override { return {"OrderCreated"}; }
 
-    std::vector<Cover> prepare(const EventBook& trigger, const TestState& state,
-                               const google::protobuf::Any& event) override {
-        prepare_called_ = true;
-        return {};
-    }
-
     ProcessManagerResponse handle(const EventBook& trigger, const TestState& state,
                                   const google::protobuf::Any& event,
                                   const std::vector<EventBook>& destinations) override {
@@ -140,7 +134,6 @@ class MockPmHandler : public ProcessManagerDomainHandler<TestState> {
     }
 
     // Test inspection
-    bool prepare_called_ = false;
     bool handle_called_ = false;
     bool rejection_called_ = false;
     TestState last_state_;
