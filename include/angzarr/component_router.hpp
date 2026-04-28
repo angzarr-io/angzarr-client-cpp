@@ -231,13 +231,11 @@ class CommandHandlerRouter {
  *
  * Example:
  * @code
- *   SagaRouter<OrderSagaHandler> router("saga-order-fulfillment", "order", OrderSagaHandler());
+ *   SagaRouter<OrderSagaHandler> router("saga-order-fulfillment", "order", "fulfillment",
+ *                                       OrderSagaHandler());
  *
  *   // Get subscriptions
  *   auto subs = router.subscriptions();
- *
- *   // Prepare destinations
- *   auto covers = router.prepare_destinations(source);
  *
  *   // Dispatch event
  *   auto response = router.dispatch(source, destinations);
@@ -255,10 +253,14 @@ class SagaRouter {
      *
      * @param name The router name (e.g., "saga-order-fulfillment")
      * @param domain The input domain name (e.g., "order")
+     * @param target_domain The target domain where commands are sent (e.g., "fulfillment")
      * @param handler The handler instance
      */
-    SagaRouter(std::string name, std::string domain, H handler)
-        : name_(std::move(name)), domain_(std::move(domain)), handler_(std::move(handler)) {}
+    SagaRouter(std::string name, std::string domain, std::string target_domain, H handler)
+        : name_(std::move(name)),
+          domain_(std::move(domain)),
+          target_domain_(std::move(target_domain)),
+          handler_(std::move(handler)) {}
 
     /**
      * Get the router name.
@@ -269,6 +271,11 @@ class SagaRouter {
      * Get the input domain.
      */
     const std::string& input_domain() const { return domain_; }
+
+    /**
+     * Get the target domain (where commands are sent).
+     */
+    const std::string& target_domain() const { return target_domain_; }
 
     /**
      * Get event types from the handler.
@@ -289,25 +296,6 @@ class SagaRouter {
      */
     Descriptor descriptor() const {
         return {name_, component_types::SAGA, {{domain_, handler_.event_types()}}};
-    }
-
-    /**
-     * Get destinations needed for the given source events.
-     *
-     * @param source The source event book (optional)
-     * @return Covers for destinations to fetch
-     */
-    std::vector<Cover> prepare_destinations(const EventBook* source) {
-        if (!source || source->pages_size() == 0) {
-            return {};
-        }
-
-        const auto& last_page = source->pages(source->pages_size() - 1);
-        if (!last_page.has_event()) {
-            return {};
-        }
-
-        return handler_.prepare(*source, last_page.event());
     }
 
     /**
@@ -341,6 +329,7 @@ class SagaRouter {
    private:
     std::string name_;
     std::string domain_;
+    std::string target_domain_;
     H handler_;
 };
 
@@ -701,12 +690,15 @@ CommandHandlerRouter<S, H> make_command_handler_router(std::string name, std::st
  * @tparam H The handler type
  * @param name The router name
  * @param domain The input domain name
+ * @param target_domain The target domain where commands are sent
  * @param handler The handler instance
  * @return SagaRouter instance
  */
 template <typename H>
-SagaRouter<H> make_saga_router(std::string name, std::string domain, H handler) {
-    return SagaRouter<H>(std::move(name), std::move(domain), std::move(handler));
+SagaRouter<H> make_saga_router(std::string name, std::string domain, std::string target_domain,
+                                H handler) {
+    return SagaRouter<H>(std::move(name), std::move(domain), std::move(target_domain),
+                          std::move(handler));
 }
 
 /**

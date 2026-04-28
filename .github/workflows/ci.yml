@@ -25,10 +25,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake build-essential protobuf-compiler \
             libprotobuf-dev libgrpc++-dev libgtest-dev libgmock-dev \
-            protobuf-compiler-grpc
+            protobuf-compiler-grpc clang-format
 
       - name: Build
         run: just -f justfile.container build
 
       - name: Test
         run: just -f justfile.container test
+
+      - name: Format check
+        run: just -f justfile.container fmt
+        continue-on-error: true  # TODO: fix existing format violations then remove

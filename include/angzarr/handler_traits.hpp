@@ -299,6 +299,16 @@ class CommandHandlerDomainHandler {
     }
 
     /**
+     * Handle injected facts and return the resulting EventBook.
+     *
+     * Facts are always accepted (cannot be rejected). Override to emit
+     * additional events or augment facts. Default: pass-through.
+     */
+    virtual EventBook handle_fact(const EventBook& facts, const S& state) {
+        return facts;
+    }
+
+    /**
      * Handle a command and return resulting events.
      *
      * The handler should dispatch internally based on `payload.type_url`.
@@ -356,11 +366,6 @@ class CommandHandlerDomainHandler {
  *           return {"OrderCompleted", "OrderCancelled"};
  *       }
  *
- *       std::vector<Cover> prepare(const EventBook& source,
- *                                  const google::protobuf::Any& event) override {
- *           // Return covers for destinations to fetch
- *       }
- *
  *       SagaHandlerResponse execute(const EventBook& source,
  *                                   const google::protobuf::Any& event,
  *                                   const std::vector<EventBook>& destinations) override {
@@ -380,18 +385,6 @@ class SagaDomainHandler {
      * Used for subscription derivation.
      */
     virtual std::vector<std::string> event_types() const = 0;
-
-    /**
-     * Prepare phase -- declare destination covers needed.
-     *
-     * Called before execute to fetch destination aggregate state.
-     *
-     * @param source The source event book
-     * @param event The event being processed
-     * @return Covers for destinations to fetch
-     */
-    virtual std::vector<Cover> prepare(const EventBook& source,
-                                       const google::protobuf::Any& event) = 0;
 
     /**
      * Execute phase -- produce commands and/or events.

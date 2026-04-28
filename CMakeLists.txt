@@ -16,7 +16,7 @@ find_package(gRPC CONFIG REQUIRED)
 find_package(absl CONFIG REQUIRED)
 
 # Proto generation
-set(PROTO_DIR "${CMAKE_SOURCE_DIR}/angzarr-core/proto")
+set(PROTO_DIR "${CMAKE_SOURCE_DIR}/angzarr-project/proto")
 set(PROTO_FILES
     ${PROTO_DIR}/google/api/annotations.proto
     ${PROTO_DIR}/google/api/http.proto
@@ -223,11 +223,11 @@ target_link_libraries(state_building_test
         GTest::gtest_main
 )
 
-add_executable(unified_router_test
-    tests/unified_router_test.cpp
+add_executable(component_router_test
+    tests/component_router_test.cpp
 )
 
-target_link_libraries(unified_router_test
+target_link_libraries(component_router_test
     PRIVATE
         angzarr-client
         GTest::gtest
@@ -241,4 +241,4 @@ gtest_discover_tests(error_introspection_test)
 gtest_discover_tests(router_test)
 gtest_discover_tests(compensation_test)
 gtest_discover_tests(state_building_test)
-gtest_discover_tests(unified_router_test)
+gtest_discover_tests(component_router_test)

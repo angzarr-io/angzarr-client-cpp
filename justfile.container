@@ -22,6 +22,14 @@ build:
 test:
     cmake -B build && cmake --build build && ctest --test-dir build --output-on-failure
 
+# Format check (clang-format, Google style)
+fmt:
+    find src include -name "*.cpp" -o -name "*.hpp" | xargs clang-format --dry-run --Werror --style=Google
+
+# Auto-format code
+fmt-fix:
+    find src include -name "*.cpp" -o -name "*.hpp" | xargs clang-format -i --style=Google
+
 # Create release archive with checksums
 archive VERSION:
     cd {{ROOT}} && git archive --format=tar.gz --prefix=angzarr-client-cpp-{{VERSION}}/ -o client/cpp/angzarr-client-cpp-{{VERSION}}.tar.gz HEAD:client/cpp
