@@ -4,7 +4,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "angzarr/types.pb.h"
+#include "angzarr/proto.hpp"
 
 namespace angzarr {
 

@@ -7,8 +7,8 @@
 #include <string>
 #include <vector>
 
-#include "angzarr/types.pb.h"
-#include "angzarr/upcaster.grpc.pb.h"
+#include "angzarr/proto.hpp"
+#include "angzarr/proto.hpp"
 
 namespace angzarr {
 

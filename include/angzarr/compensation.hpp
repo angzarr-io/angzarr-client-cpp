@@ -3,7 +3,7 @@
 #include <optional>
 #include <string>
 
-#include "angzarr/types.pb.h"
+#include "angzarr/proto.hpp"
 #include "helpers.hpp"
 
 namespace angzarr {

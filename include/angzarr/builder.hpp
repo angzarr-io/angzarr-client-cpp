@@ -7,9 +7,9 @@
 #include <string>
 #include <vector>
 
-#include "angzarr/command_handler.pb.h"
-#include "angzarr/query.pb.h"
-#include "angzarr/types.pb.h"
+#include "angzarr/proto.hpp"
+#include "angzarr/proto.hpp"
+#include "angzarr/proto.hpp"
 #include "client.hpp"
 #include "errors.hpp"
 #include "helpers.hpp"

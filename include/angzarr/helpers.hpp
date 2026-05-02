@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-#include "angzarr/types.pb.h"
+#include "angzarr/proto.hpp"
 
 namespace angzarr {
 

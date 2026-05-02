@@ -10,8 +10,8 @@
 #include <utility>
 #include <vector>
 
-#include "angzarr/cloudevents.pb.h"
-#include "angzarr/types.pb.h"
+#include "angzarr/proto.hpp"
+#include "angzarr/proto.hpp"
 #include "descriptor.hpp"
 #include "helpers.hpp"
 

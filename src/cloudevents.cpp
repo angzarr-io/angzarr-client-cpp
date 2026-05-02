@@ -6,7 +6,7 @@
 #include <iostream>
 #include <string>
 
-#include "angzarr/projector.grpc.pb.h"
+#include "angzarr/proto.hpp"
 
 namespace angzarr {
 namespace {

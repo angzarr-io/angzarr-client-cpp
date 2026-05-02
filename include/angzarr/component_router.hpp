@@ -10,10 +10,10 @@
 #include <utility>
 #include <vector>
 
-#include "angzarr/command_handler.pb.h"
-#include "angzarr/process_manager.pb.h"
-#include "angzarr/saga.pb.h"
-#include "angzarr/types.pb.h"
+#include "angzarr/proto.hpp"
+#include "angzarr/proto.hpp"
+#include "angzarr/proto.hpp"
+#include "angzarr/proto.hpp"
 #include "descriptor.hpp"
 #include "errors.hpp"
 #include "handler_traits.hpp"

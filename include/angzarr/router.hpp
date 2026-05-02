@@ -8,8 +8,8 @@
 #include <string>
 #include <vector>
 
-#include "angzarr/command_handler.pb.h"
-#include "angzarr/types.pb.h"
+#include "angzarr/proto.hpp"
+#include "angzarr/proto.hpp"
 #include "errors.hpp"
 #include "handler_traits.hpp"
 #include "helpers.hpp"

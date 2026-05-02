@@ -7,8 +7,8 @@
 #include <string>
 #include <vector>
 
-#include "angzarr/saga.pb.h"
-#include "angzarr/types.pb.h"
+#include "angzarr/proto.hpp"
+#include "angzarr/proto.hpp"
 #include "descriptor.hpp"
 #include "errors.hpp"
 #include "helpers.hpp"

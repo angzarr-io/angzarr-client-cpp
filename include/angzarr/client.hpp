@@ -6,11 +6,11 @@
 #include <memory>
 #include <string>
 
-#include "angzarr/command_handler.grpc.pb.h"
-#include "angzarr/command_handler.pb.h"
-#include "angzarr/query.grpc.pb.h"
-#include "angzarr/query.pb.h"
-#include "angzarr/types.pb.h"
+#include "angzarr/proto.hpp"
+#include "angzarr/proto.hpp"
+#include "angzarr/proto.hpp"
+#include "angzarr/proto.hpp"
+#include "angzarr/proto.hpp"
 #include "errors.hpp"
 #include "retry.hpp"
 
