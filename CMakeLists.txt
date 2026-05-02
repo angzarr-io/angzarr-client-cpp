@@ -16,20 +16,34 @@ find_package(gRPC CONFIG REQUIRED)
 find_package(absl CONFIG REQUIRED)
 
 # Proto generation
+#
+# angzarr-project relocated proto files from proto/angzarr/*.proto to
+# proto/angzarr_client/proto/angzarr/*.proto (Python and Rust adapted
+# previously). For C++ we want the generated headers to keep landing at
+# generated/angzarr/types.pb.h so existing `#include "angzarr/types.pb.h"`
+# source lines stay valid. We achieve this with two -I paths:
+#   1. angzarr-project/proto/angzarr_client/proto  → makes angzarr/* files
+#      have a SHORT relative path (`angzarr/types.proto`) and emit at
+#      `${GENERATED_DIR}/angzarr/types.pb.h`.
+#   2. angzarr-project/proto                       → keeps cross-imports
+#      like `angzarr_client/proto/angzarr/types.proto` resolvable AND
+#      lets google/api/* files keep their relative path
+#      (`google/api/annotations.proto`).
 set(PROTO_DIR "${CMAKE_SOURCE_DIR}/angzarr-project/proto")
+set(PROTO_INCLUDE_DIR "${PROTO_DIR}/angzarr_client/proto")
 set(PROTO_FILES
     ${PROTO_DIR}/google/api/annotations.proto
     ${PROTO_DIR}/google/api/http.proto
-    ${PROTO_DIR}/angzarr/types.proto
-    ${PROTO_DIR}/angzarr/command_handler.proto
-    ${PROTO_DIR}/angzarr/saga.proto
-    ${PROTO_DIR}/angzarr/projector.proto
-    ${PROTO_DIR}/angzarr/process_manager.proto
-    ${PROTO_DIR}/angzarr/query.proto
-    ${PROTO_DIR}/angzarr/stream.proto
-    ${PROTO_DIR}/angzarr/upcaster.proto
-    ${PROTO_DIR}/angzarr/meta.proto
-    ${PROTO_DIR}/angzarr/cloudevents.proto
+    ${PROTO_INCLUDE_DIR}/angzarr/types.proto
+    ${PROTO_INCLUDE_DIR}/angzarr/command_handler.proto
+    ${PROTO_INCLUDE_DIR}/angzarr/saga.proto
+    ${PROTO_INCLUDE_DIR}/angzarr/projector.proto
+    ${PROTO_INCLUDE_DIR}/angzarr/process_manager.proto
+    ${PROTO_INCLUDE_DIR}/angzarr/query.proto
+    ${PROTO_INCLUDE_DIR}/angzarr/stream.proto
+    ${PROTO_INCLUDE_DIR}/angzarr/upcaster.proto
+    ${PROTO_INCLUDE_DIR}/angzarr/meta.proto
+    ${PROTO_INCLUDE_DIR}/angzarr/cloudevents.proto
 )
 
 set(GENERATED_DIR "${CMAKE_BINARY_DIR}/generated")
@@ -37,8 +51,10 @@ file(MAKE_DIRECTORY ${GENERATED_DIR})
 file(MAKE_DIRECTORY ${GENERATED_DIR}/angzarr)
 file(MAKE_DIRECTORY ${GENERATED_DIR}/google/api)
 
-# Generate protobuf and gRPC sources
-# Use relative path from PROTO_DIR to preserve subdirectory structure
+# Generate protobuf and gRPC sources.
+# Compute output subdir against PROTO_INCLUDE_DIR for angzarr files so
+# they emit at generated/angzarr/*; fall back to PROTO_DIR for everything
+# else (the google/api/* files).
 set(PROTO_SRCS)
 set(PROTO_HDRS)
 set(GRPC_SRCS)
@@ -46,8 +62,13 @@ set(GRPC_HDRS)
 
 foreach(PROTO_FILE ${PROTO_FILES})
     get_filename_component(PROTO_NAME ${PROTO_FILE} NAME_WE)
-    # Get relative path from PROTO_DIR to preserve subdirectory (angzarr/ or examples/)
-    file(RELATIVE_PATH PROTO_REL_PATH ${PROTO_DIR} ${PROTO_FILE})
+    # Pick the longest matching include root for output-path computation.
+    string(FIND ${PROTO_FILE} ${PROTO_INCLUDE_DIR}/ _MATCH_INCLUDE)
+    if(${_MATCH_INCLUDE} EQUAL 0)
+        file(RELATIVE_PATH PROTO_REL_PATH ${PROTO_INCLUDE_DIR} ${PROTO_FILE})
+    else()
+        file(RELATIVE_PATH PROTO_REL_PATH ${PROTO_DIR} ${PROTO_FILE})
+    endif()
     get_filename_component(PROTO_SUBDIR ${PROTO_REL_PATH} DIRECTORY)
 
     set(OUT_DIR "${GENERATED_DIR}/${PROTO_SUBDIR}")
@@ -67,6 +88,7 @@ foreach(PROTO_FILE ${PROTO_FILES})
         ARGS --grpc_out=${GENERATED_DIR}
              --cpp_out=${GENERATED_DIR}
              --plugin=protoc-gen-grpc=$<TARGET_FILE:gRPC::grpc_cpp_plugin>
+             -I${PROTO_INCLUDE_DIR}
              -I${PROTO_DIR}
              ${PROTO_FILE}
         DEPENDS ${PROTO_FILE}
