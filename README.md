@@ -44,3 +44,4 @@ just test            # Run tests
 just fmt             # Check formatting
 just fmt-fix         # Auto-format code
 ```
+
