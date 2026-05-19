@@ -5,8 +5,7 @@
 
 #include <string>
 
-#include "angzarr/command_handler.pb.h"
-#include "angzarr/types.pb.h"
+#include "angzarr/proto_aliases.hpp"
 
 using namespace angzarr;
 

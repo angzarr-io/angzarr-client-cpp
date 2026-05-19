@@ -21,12 +21,15 @@
 // Registration macros
 #include "macros.hpp"
 
+// Destination sequences for command stamping
+#include "destinations.hpp"
+
 // Functional router pattern
 #include "router.hpp"
 
 // Unified router pattern (trait-based)
-#include "handler_traits.hpp"
 #include "component_router.hpp"
+#include "handler_traits.hpp"
 
 // OO base classes with macro registration
 #include "command_handler.hpp"
@@ -45,3 +48,12 @@
 
 // Compensation context for rejection handling
 #include "compensation.hpp"
+
+// Structured logging (audit #87..#91)
+#include "logging.hpp"
+
+// Readiness probes + supervisor (audit #68 / #74 / #82)
+#include "readiness.hpp"
+
+// Testing helpers (audit #50 / #99 / #105)
+#include "testing.hpp"

@@ -7,8 +7,7 @@
 #include <string>
 #include <vector>
 
-#include "angzarr/proto.hpp"
-#include "angzarr/proto.hpp"
+#include "angzarr/proto_aliases.hpp"
 
 namespace angzarr {
 
@@ -17,7 +16,8 @@ namespace angzarr {
  *
  * Takes an old event (Any) and returns the new event (Any).
  */
-using UpcasterHandler = std::function<google::protobuf::Any(const google::protobuf::Any&)>;
+using UpcasterHandler =
+    std::function<google::protobuf::Any(const google::protobuf::Any&)>;
 
 /**
  * Event version transformer.
@@ -42,89 +42,90 @@ using UpcasterHandler = std::function<google::protobuf::Any(const google::protob
  * @endcode
  */
 class UpcasterRouter {
-   public:
-    /**
-     * Create a new upcaster router for a domain.
-     *
-     * @param domain The domain this upcaster handles
-     */
-    explicit UpcasterRouter(const std::string& domain) : domain_(domain) {}
+ public:
+  /**
+   * Create a new upcaster router for a domain.
+   *
+   * @param domain The domain this upcaster handles
+   */
+  explicit UpcasterRouter(const std::string& domain) : domain_(domain) {}
 
-    /**
-     * Register a handler for an old event type_url suffix.
-     *
-     * The suffix is matched against the end of the event's type_url.
-     * For example, suffix "OrderCreatedV1" matches
-     * "type.googleapis.com/examples.OrderCreatedV1".
-     *
-     * @param suffix The type_url suffix to match
-     * @param handler Function that transforms old event to new event
-     * @return Reference to this router for fluent chaining
-     */
-    UpcasterRouter& on(const std::string& suffix, UpcasterHandler handler) {
-        handlers_.emplace_back(suffix, std::move(handler));
-        return *this;
-    }
+  /**
+   * Register a handler for an old event type_url suffix.
+   *
+   * The suffix is matched against the end of the event's type_url.
+   * For example, suffix "OrderCreatedV1" matches
+   * "type.googleapis.com/examples.OrderCreatedV1".
+   *
+   * @param suffix The type_url suffix to match
+   * @param handler Function that transforms old event to new event
+   * @return Reference to this router for fluent chaining
+   */
+  UpcasterRouter& on(const std::string& suffix, UpcasterHandler handler) {
+    handlers_.emplace_back(suffix, std::move(handler));
+    return *this;
+  }
 
-    /**
-     * Transform a list of events to current versions.
-     *
-     * Events matching registered handlers are transformed.
-     * Events without matching handlers pass through unchanged.
-     *
-     * @param events Vector of EventPages to transform
-     * @return Vector of EventPages with transformed events
-     */
-    std::vector<EventPage> upcast(const std::vector<EventPage>& events) const {
-        std::vector<EventPage> result;
-        result.reserve(events.size());
+  /**
+   * Transform a list of events to current versions.
+   *
+   * Events matching registered handlers are transformed.
+   * Events without matching handlers pass through unchanged.
+   *
+   * @param events Vector of EventPages to transform
+   * @return Vector of EventPages with transformed events
+   */
+  std::vector<EventPage> upcast(const std::vector<EventPage>& events) const {
+    std::vector<EventPage> result;
+    result.reserve(events.size());
 
-        for (const auto& page : events) {
-            if (!page.has_event()) {
-                result.push_back(page);
-                continue;
-            }
+    for (const auto& page : events) {
+      if (!page.has_event()) {
+        result.push_back(page);
+        continue;
+      }
 
-            const auto& event = page.event();
-            const std::string& type_url = event.type_url();
-            bool transformed = false;
+      const auto& event = page.event();
+      const std::string& type_url = event.type_url();
+      bool transformed = false;
 
-            for (const auto& [suffix, handler] : handlers_) {
-                if (type_url.size() >= suffix.size() &&
-                    type_url.compare(type_url.size() - suffix.size(), suffix.size(), suffix) == 0) {
-                    auto new_event = handler(event);
-                    EventPage new_page;
-                    new_page.mutable_event()->CopyFrom(new_event);
-                    if (page.has_header()) {
-                        new_page.mutable_header()->set_sequence(page.header().sequence());
-                    }
-                    if (page.has_created_at()) {
-                        new_page.mutable_created_at()->CopyFrom(page.created_at());
-                    }
-                    result.push_back(std::move(new_page));
-                    transformed = true;
-                    break;
-                }
-            }
-
-            if (!transformed) {
-                result.push_back(page);
-            }
+      for (const auto& [suffix, handler] : handlers_) {
+        if (type_url.size() >= suffix.size() &&
+            type_url.compare(type_url.size() - suffix.size(), suffix.size(),
+                             suffix) == 0) {
+          auto new_event = handler(event);
+          EventPage new_page;
+          new_page.mutable_event()->CopyFrom(new_event);
+          if (page.has_header()) {
+            new_page.mutable_header()->set_sequence(page.header().sequence());
+          }
+          if (page.has_created_at()) {
+            new_page.mutable_created_at()->CopyFrom(page.created_at());
+          }
+          result.push_back(std::move(new_page));
+          transformed = true;
+          break;
         }
+      }
 
-        return result;
+      if (!transformed) {
+        result.push_back(page);
+      }
     }
 
-    /**
-     * Get the domain this upcaster handles.
-     *
-     * @return The domain name
-     */
-    const std::string& domain() const { return domain_; }
+    return result;
+  }
 
-   private:
-    std::string domain_;
-    std::vector<std::pair<std::string, UpcasterHandler>> handlers_;
+  /**
+   * Get the domain this upcaster handles.
+   *
+   * @return The domain name
+   */
+  const std::string& domain() const { return domain_; }
+
+ private:
+  std::string domain_;
+  std::vector<std::pair<std::string, UpcasterHandler>> handlers_;
 };
 
 // ============================================================================
@@ -149,40 +150,43 @@ class UpcasterRouter {
  * @endcode
  */
 class UpcasterGrpcHandler final : public UpcasterService::Service {
-   public:
-    /**
-     * Create a new upcaster gRPC handler.
-     *
-     * @param router The upcaster router to use for transformations
-     */
-    explicit UpcasterGrpcHandler(UpcasterRouter router) : router_(std::move(router)) {}
+ public:
+  /**
+   * Create a new upcaster gRPC handler.
+   *
+   * @param router The upcaster router to use for transformations
+   */
+  explicit UpcasterGrpcHandler(UpcasterRouter router)
+      : router_(std::move(router)) {}
 
-    /**
-     * Get the underlying router.
-     */
-    const UpcasterRouter& router() const { return router_; }
+  /**
+   * Get the underlying router.
+   */
+  const UpcasterRouter& router() const { return router_; }
 
-    /**
-     * Get the domain this handler serves.
-     */
-    const std::string& domain() const { return router_.domain(); }
+  /**
+   * Get the domain this handler serves.
+   */
+  const std::string& domain() const { return router_.domain(); }
 
-    grpc::Status Upcast(grpc::ServerContext* context, const UpcastRequest* request,
-                        UpcastResponse* response) override {
-        (void)context;
+  grpc::Status Upcast(grpc::ServerContext* context,
+                      const UpcastRequest* request,
+                      UpcastResponse* response) override {
+    (void)context;
 
-        std::vector<EventPage> events(request->events().begin(), request->events().end());
-        auto transformed = router_.upcast(events);
+    std::vector<EventPage> events(request->events().begin(),
+                                  request->events().end());
+    auto transformed = router_.upcast(events);
 
-        for (const auto& page : transformed) {
-            *response->add_events() = page;
-        }
-
-        return grpc::Status::OK;
+    for (const auto& page : transformed) {
+      *response->add_events() = page;
     }
 
-   private:
-    UpcasterRouter router_;
+    return grpc::Status::OK;
+  }
+
+ private:
+  UpcasterRouter router_;
 };
 
 // ============================================================================
@@ -206,6 +210,7 @@ class UpcasterGrpcHandler final : public UpcasterService::Service {
  * run_upcaster_server("upcaster-player", 50401, std::move(router));
  * @endcode
  */
-void run_upcaster_server(const std::string& name, int port, UpcasterRouter router);
+void run_upcaster_server(const std::string& name, int port,
+                         UpcasterRouter router);
 
 }  // namespace angzarr

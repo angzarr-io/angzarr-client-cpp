@@ -4,5 +4,39 @@
 ARG CPP_IMAGE=ghcr.io/angzarr-io/angzarr-cpp:latest
 FROM ${CPP_IMAGE}
 
+# INFRA-1: rootless docker — trust any bind-mounted workspace path so
+# `git rev-parse --show-toplevel` inside `just _container` succeeds.
+USER root
+RUN git config --system --add safe.directory '*' \
+ && git config --system --add safe.directory '/workspace' \
+ && git config --system --add safe.directory '/angzarr'
+
 # Mark as devcontainer for justfile detection
 ENV DEVCONTAINER=true
+
+# Mutation tooling: mull (runner + compiler frontend).
+#
+# The base image bakes mull-runner-17 and mull-ir-frontend-17 at:
+#   /usr/bin/mull-runner-17           (0.33.0, LLVM 17.0.6)
+#   /usr/lib/mull-ir-frontend-17      (compiler-driver wrapper)
+#
+# Phase E.v2 (2026-05-16) DISCOVERED that the bundled mull-ir-frontend-17
+# segfaults on this image (apt list 'mull-17' 0.33.0 + libabsl 20220623 +
+# clang-17). This breaks the full-library mutation flow: `mull-runner-17`
+# reports "no mutants found" because no IR is embedded in the test binary.
+#
+# Workaround documented for next image refresh:
+#   - Upgrade to mull >= 0.34 OR bisect the segfault against a clean
+#     ubuntu:24.04 with apt-installed mull-17.
+#   - Verify with: `/usr/lib/mull-ir-frontend-17 --version` (should NOT
+#     segfault).
+#   - For build-mull, use: `cmake -DCMAKE_CXX_COMPILER=clang++-17 \
+#     -DCMAKE_CXX_FLAGS='-g -grecord-command-line -w' -B build-mull \
+#     -DCMAKE_CXX_LINK_FLAGS='-Wl,--unresolved-symbols=ignore-all'`.
+#
+# Documented score (from D-C++ fix-log, 2026-05-16): 85% on scoped
+# `mutation_tests_d_cpp` binary (119 killed / 19 survived / 138 mutants).
+ARG MULL_VERSION=0.33.0
+ENV ANGZARR_MULL_RUNNER=/usr/bin/mull-runner-17
+ENV ANGZARR_MULL_IR_FRONTEND=/usr/lib/mull-ir-frontend-17
+ENV ANGZARR_MULL_VERSION=${MULL_VERSION}

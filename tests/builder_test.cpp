@@ -5,9 +5,7 @@
 
 #include <string>
 
-#include "angzarr/command_handler.pb.h"
-#include "angzarr/query.pb.h"
-#include "angzarr/types.pb.h"
+#include "angzarr/proto_aliases.hpp"
 
 using namespace angzarr;
 
@@ -35,7 +33,7 @@ TEST_F(CommandBuilderTest, Build_WithExplicitFieldValues_ShouldSetAllFields) {
     test_msg.set_type_url("type.googleapis.com/test.TestCommand");
     test_msg.set_value("test payload");
 
-    CommandBuilder builder(nullptr, "test");
+    CommandBuilder builder(nullptr, "test", CommandBuilder::AutoGenerateRoot{});
     builder.with_root(root)
         .with_correlation_id(correlation_id)
         .with_sequence(sequence)
@@ -55,7 +53,7 @@ TEST_F(CommandBuilderTest, Build_WithoutCorrelationId_ShouldAutoGenerateOne) {
     google::protobuf::Any test_msg;
     test_msg.set_type_url("type.googleapis.com/test.TestCommand");
 
-    CommandBuilder builder(nullptr, "test");
+    CommandBuilder builder(nullptr, "test", CommandBuilder::AutoGenerateRoot{});
     builder.with_sequence(0)
         .with_command("type.googleapis.com/test.TestCommand", test_msg);
 
@@ -67,19 +65,22 @@ TEST_F(CommandBuilderTest, Build_WithoutCorrelationId_ShouldAutoGenerateOne) {
     EXPECT_EQ(command.cover().correlation_id().length(), 36);
 }
 
-TEST_F(CommandBuilderTest, Build_ForNewAggregate_ShouldHaveNoRootUUID) {
-    // When I build a command for domain "test" without specifying root
+TEST_F(CommandBuilderTest, Build_ForNewAggregate_StampsClientGeneratedRoot) {
+    // Spec HIGH-3.1 + audit #20: the AutoGenerateRoot path materializes
+    // a fresh UUID v4 client-side immediately; the resulting cover
+    // ALWAYS has a stamped root. The previous "rootless" path that
+    // produced a cover with no root was removed.
     google::protobuf::Any test_msg;
     test_msg.set_type_url("type.googleapis.com/test.TestCommand");
 
-    CommandBuilder builder(nullptr, "test");
+    CommandBuilder builder(nullptr, "test", CommandBuilder::AutoGenerateRoot{});
     builder.with_sequence(0)
         .with_command("type.googleapis.com/test.TestCommand", test_msg);
 
     auto command = builder.build();
 
-    // Then the resulting CommandBook should have no root UUID
-    EXPECT_FALSE(command.cover().has_root());
+    EXPECT_TRUE(command.cover().has_root());
+    EXPECT_EQ(command.cover().root().value().size(), 16u);
 }
 
 TEST_F(CommandBuilderTest, Build_WithoutSequence_ShouldThrow) {
@@ -87,7 +88,7 @@ TEST_F(CommandBuilderTest, Build_WithoutSequence_ShouldThrow) {
     google::protobuf::Any test_msg;
     test_msg.set_type_url("type.googleapis.com/test.TestCommand");
 
-    CommandBuilder builder(nullptr, "test");
+    CommandBuilder builder(nullptr, "test", CommandBuilder::AutoGenerateRoot{});
     builder.with_command("type.googleapis.com/test.TestCommand", test_msg);
 
     // Then build should throw InvalidArgumentError
@@ -99,7 +100,7 @@ TEST_F(CommandBuilderTest, Build_WithSequenceZero_ShouldSucceed) {
     google::protobuf::Any test_msg;
     test_msg.set_type_url("type.googleapis.com/test.TestCommand");
 
-    CommandBuilder builder(nullptr, "test");
+    CommandBuilder builder(nullptr, "test", CommandBuilder::AutoGenerateRoot{});
     builder.with_sequence(0)
         .with_command("type.googleapis.com/test.TestCommand", test_msg);
 
@@ -114,7 +115,7 @@ TEST_F(CommandBuilderTest, MethodChaining_ShouldReturnBuilder) {
     google::protobuf::Any test_msg;
     test_msg.set_type_url("type.googleapis.com/test.TestCommand");
 
-    CommandBuilder builder(nullptr, "test");
+    CommandBuilder builder(nullptr, "test", CommandBuilder::AutoGenerateRoot{});
 
     auto& result1 = builder.with_correlation_id("chain-test");
     auto& result2 = result1.with_sequence(10);
@@ -132,7 +133,7 @@ TEST_F(CommandBuilderTest, MethodChaining_ShouldReturnBuilder) {
 
 TEST_F(CommandBuilderTest, Build_WithoutCommand_ShouldThrow) {
     // When trying to build without setting a command
-    CommandBuilder builder(nullptr, "test");
+    CommandBuilder builder(nullptr, "test", CommandBuilder::AutoGenerateRoot{});
 
     // Then it should throw InvalidArgumentError
     EXPECT_THROW(builder.build(), InvalidArgumentError);
@@ -248,4 +249,19 @@ TEST_F(QueryBuilderTest, Build_InvalidTimestamp_ShouldThrow) {
 
     // Then as_of_time with invalid timestamp should throw
     EXPECT_THROW(builder.as_of_time("not-a-timestamp"), InvalidTimestampError);
+}
+
+TEST_F(QueryBuilderTest, RangeTo_UpperBoundIsInclusive) {
+    // Audit finding #27 (Rust a3f1bf2 / Python 8d6311b): the upper
+    // bound of range_to(lower, upper) is INCLUSIVE — the cucumber
+    // contract for ``from 3 to 7`` is "5 events, last sequence 7".
+    // The wire-level Query.range.upper field carries the inclusive
+    // upper bound verbatim.
+    QueryBuilder builder(nullptr, "test");
+    builder.with_root(test_root_bytes()).range_to(3, 7);
+
+    auto query = builder.build();
+    ASSERT_TRUE(query.has_range());
+    EXPECT_EQ(query.range().lower(), 3u);
+    EXPECT_EQ(query.range().upper(), 7u);
 }

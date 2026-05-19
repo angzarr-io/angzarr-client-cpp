@@ -4,10 +4,9 @@
 
 #include <string>
 
-#include "angzarr/command_handler.pb.h"
+#include "angzarr/proto_aliases.hpp"
 #include "angzarr/helpers.hpp"
 #include "angzarr/router.hpp"
-#include "angzarr/types.pb.h"
 
 using namespace angzarr;
 

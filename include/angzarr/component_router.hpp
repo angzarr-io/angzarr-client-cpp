@@ -6,18 +6,18 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "angzarr/proto.hpp"
-#include "angzarr/proto.hpp"
-#include "angzarr/proto.hpp"
-#include "angzarr/proto.hpp"
+#include "angzarr/proto_aliases.hpp"
 #include "descriptor.hpp"
+#include "destinations.hpp"
 #include "errors.hpp"
 #include "handler_traits.hpp"
 #include "helpers.hpp"
+#include "logging.hpp"
 
 namespace angzarr {
 
@@ -36,7 +36,8 @@ namespace angzarr {
  *
  * Example:
  * @code
- *   CommandHandlerRouter<PlayerState, PlayerHandler> router("player", "player", PlayerHandler());
+ *   CommandHandlerRouter<PlayerState, PlayerHandler> router("player", "player",
+ * PlayerHandler());
  *
  *   // Get subscriptions for registration
  *   auto subs = router.subscriptions();
@@ -47,174 +48,185 @@ namespace angzarr {
  */
 template <typename S, typename H>
 class CommandHandlerRouter {
-    static_assert(std::is_base_of_v<CommandHandlerDomainHandler<S>, H>,
-                  "H must derive from CommandHandlerDomainHandler<S>");
+  static_assert(std::is_base_of_v<CommandHandlerDomainHandler<S>, H>,
+                "H must derive from CommandHandlerDomainHandler<S>");
 
-   public:
-    using State = S;
-    using Handler = H;
+ public:
+  using State = S;
+  using Handler = H;
 
-    /**
-     * Create a new command handler router.
-     *
-     * @param name The router name (e.g., "player")
-     * @param domain The domain name (e.g., "player")
-     * @param handler The handler instance
-     */
-    CommandHandlerRouter(std::string name, std::string domain, H handler)
-        : name_(std::move(name)), domain_(std::move(domain)), handler_(std::move(handler)) {}
+  /**
+   * Create a new command handler router.
+   *
+   * @param name The router name (e.g., "player")
+   * @param domain The domain name (e.g., "player")
+   * @param handler The handler instance
+   */
+  CommandHandlerRouter(std::string name, std::string domain, H handler)
+      : name_(std::move(name)),
+        domain_(std::move(domain)),
+        handler_(std::move(handler)) {}
 
-    /**
-     * Get the router name.
-     */
-    const std::string& name() const { return name_; }
+  /**
+   * Get the router name.
+   */
+  const std::string& name() const { return name_; }
 
-    /**
-     * Get the domain.
-     */
-    const std::string& domain() const { return domain_; }
+  /**
+   * Get the domain.
+   */
+  const std::string& domain() const { return domain_; }
 
-    /**
-     * Get command types from the handler.
-     */
-    std::vector<std::string> command_types() const { return handler_.command_types(); }
+  /**
+   * Get command types from the handler.
+   */
+  std::vector<std::string> command_types() const {
+    return handler_.command_types();
+  }
 
-    /**
-     * Get subscriptions for this command handler.
-     *
-     * @return Vector of (domain, types) pairs
-     */
-    std::vector<std::pair<std::string, std::vector<std::string>>> subscriptions() const {
-        return {{domain_, handler_.command_types()}};
+  /**
+   * Get subscriptions for this command handler.
+   *
+   * @return Vector of (domain, types) pairs
+   */
+  std::vector<std::pair<std::string, std::vector<std::string>>> subscriptions()
+      const {
+    return {{domain_, handler_.command_types()}};
+  }
+
+  /**
+   * Build a component descriptor for topology registration.
+   */
+  Descriptor descriptor() const {
+    return {name_,
+            component_types::AGGREGATE,
+            {{domain_, handler_.command_types()}}};
+  }
+
+  /**
+   * Rebuild state from events using the handler's state router.
+   */
+  S rebuild_state(const EventBook* events) const {
+    return handler_.rebuild(events);
+  }
+
+  /**
+   * Dispatch a contextual command to the handler.
+   *
+   * @param cmd The contextual command (command + prior events)
+   * @return BusinessResponse with events, notification, or revocation
+   * @throws InvalidArgumentError if command is malformed
+   * @throws CommandRejectedError if command is rejected by handler
+   */
+  BusinessResponse dispatch(const ContextualCommand& cmd) {
+    const auto& command_book = cmd.command();
+    const auto* prior_events = cmd.has_events() ? &cmd.events() : nullptr;
+
+    // Rebuild state from prior events
+    S state = handler_.rebuild(prior_events);
+    int seq = helpers::next_sequence(prior_events);
+
+    if (command_book.pages_size() == 0) {
+      throw InvalidArgumentError("No command pages");
     }
 
-    /**
-     * Build a component descriptor for topology registration.
-     */
-    Descriptor descriptor() const {
-        return {name_, component_types::AGGREGATE, {{domain_, handler_.command_types()}}};
+    const auto& command_any = command_book.pages(0).command();
+    if (command_any.type_url().empty()) {
+      throw InvalidArgumentError("Empty command type_url");
     }
 
-    /**
-     * Rebuild state from events using the handler's state router.
-     */
-    S rebuild_state(const EventBook* events) const { return handler_.rebuild(events); }
+    const auto& type_url = command_any.type_url();
 
-    /**
-     * Dispatch a contextual command to the handler.
-     *
-     * @param cmd The contextual command (command + prior events)
-     * @return BusinessResponse with events, notification, or revocation
-     * @throws InvalidArgumentError if command is malformed
-     * @throws CommandRejectedError if command is rejected by handler
-     */
-    BusinessResponse dispatch(const ContextualCommand& cmd) {
-        const auto& command_book = cmd.command();
-        const auto* prior_events = cmd.has_events() ? &cmd.events() : nullptr;
-
-        // Rebuild state from prior events
-        S state = handler_.rebuild(prior_events);
-        int seq = helpers::next_sequence(prior_events);
-
-        if (command_book.pages_size() == 0) {
-            throw InvalidArgumentError("No command pages");
-        }
-
-        const auto& command_any = command_book.pages(0).command();
-        if (command_any.type_url().empty()) {
-            throw InvalidArgumentError("Empty command type_url");
-        }
-
-        const auto& type_url = command_any.type_url();
-
-        // Check for Notification (rejection/compensation)
-        if (helpers::type_url_matches(type_url, "angzarr.Notification")) {
-            return dispatch_notification(command_any, state);
-        }
-
-        // Execute handler
-        auto result_book = handler_.handle(command_book, command_any, state, seq);
-
-        BusinessResponse response;
-        *response.mutable_events() = std::move(result_book);
-        return response;
+    // Check for Notification (rejection/compensation)
+    if (helpers::type_url_matches(
+            type_url, "angzarr_client.proto.angzarr.Notification")) {
+      return dispatch_notification(command_any, state);
     }
 
-   private:
-    /**
-     * Dispatch a Notification to the handler's rejection handler.
-     */
-    BusinessResponse dispatch_notification(const google::protobuf::Any& command_any,
-                                           const S& state) {
-        Notification notification;
-        if (!command_any.UnpackTo(&notification)) {
-            throw InvalidArgumentError("Failed to unpack Notification");
-        }
+    // Execute handler
+    auto result_book = handler_.handle(command_book, command_any, state, seq);
 
-        auto [target_domain, target_command] = extract_rejection_key(notification);
-        auto response = handler_.on_rejected(notification, state, target_domain, target_command);
+    BusinessResponse response;
+    *response.mutable_events() = std::move(result_book);
+    return response;
+  }
 
-        return build_rejection_response(response, target_domain, target_command);
+ private:
+  /**
+   * Dispatch a Notification to the handler's rejection handler.
+   */
+  BusinessResponse dispatch_notification(
+      const google::protobuf::Any& command_any, const S& state) {
+    Notification notification;
+    if (!command_any.UnpackTo(&notification)) {
+      throw InvalidArgumentError("Failed to unpack Notification");
     }
 
-    /**
-     * Extract domain and command suffix from a rejection notification.
-     */
-    static std::pair<std::string, std::string> extract_rejection_key(
-        const Notification& notification) {
-        std::string domain;
-        std::string command_suffix;
+    auto [target_domain, target_command] = extract_rejection_key(notification);
+    auto response = handler_.on_rejected(notification, state, target_domain,
+                                         target_command);
 
-        if (notification.has_payload()) {
-            RejectionNotification rejection;
-            if (notification.payload().UnpackTo(&rejection)) {
-                if (rejection.has_rejected_command() &&
-                    rejection.rejected_command().pages_size() > 0) {
-                    const auto& rejected_cmd = rejection.rejected_command();
-                    domain = rejected_cmd.cover().domain();
-                    command_suffix =
-                        helpers::type_name_from_url(rejected_cmd.pages(0).command().type_url());
+    return build_rejection_response(response, target_domain, target_command);
+  }
 
-                    // Extract simple type name
-                    auto dot_pos = command_suffix.rfind('.');
-                    if (dot_pos != std::string::npos) {
-                        command_suffix = command_suffix.substr(dot_pos + 1);
-                    }
-                }
-            }
+  /**
+   * Extract domain and command suffix from a rejection notification.
+   */
+  static std::pair<std::string, std::string> extract_rejection_key(
+      const Notification& notification) {
+    std::string domain;
+    std::string command_suffix;
+
+    if (notification.has_payload()) {
+      RejectionNotification rejection;
+      if (notification.payload().UnpackTo(&rejection)) {
+        if (rejection.has_rejected_command() &&
+            rejection.rejected_command().pages_size() > 0) {
+          const auto& rejected_cmd = rejection.rejected_command();
+          domain = rejected_cmd.cover().domain();
+          command_suffix = helpers::type_name_from_url(
+              rejected_cmd.pages(0).command().type_url());
+
+          // Extract simple type name
+          auto dot_pos = command_suffix.rfind('.');
+          if (dot_pos != std::string::npos) {
+            command_suffix = command_suffix.substr(dot_pos + 1);
+          }
         }
-        return {domain, command_suffix};
+      }
+    }
+    return {domain, command_suffix};
+  }
+
+  /**
+   * Build BusinessResponse from RejectionHandlerResponse.
+   */
+  BusinessResponse build_rejection_response(
+      const RejectionHandlerResponse& response,
+      const std::string& target_domain, const std::string& target_command) {
+    BusinessResponse biz_response;
+
+    if (response.events.has_value()) {
+      *biz_response.mutable_events() = *response.events;
+      return biz_response;
     }
 
-    /**
-     * Build BusinessResponse from RejectionHandlerResponse.
-     */
-    BusinessResponse build_rejection_response(const RejectionHandlerResponse& response,
-                                              const std::string& target_domain,
-                                              const std::string& target_command) {
-        BusinessResponse biz_response;
-
-        if (response.events.has_value()) {
-            *biz_response.mutable_events() = *response.events;
-            return biz_response;
-        }
-
-        if (response.notification.has_value()) {
-            *biz_response.mutable_notification() = *response.notification;
-            return biz_response;
-        }
-
-        // Default: emit system revocation
-        auto* revocation = biz_response.mutable_revocation();
-        revocation->set_emit_system_revocation(true);
-        revocation->set_reason("Handler returned empty response for " + target_domain + "/" +
-                               target_command);
-        return biz_response;
+    if (response.notification.has_value()) {
+      *biz_response.mutable_notification() = *response.notification;
+      return biz_response;
     }
 
-    std::string name_;
-    std::string domain_;
-    H handler_;
+    // Default: emit system revocation
+    auto* revocation = biz_response.mutable_revocation();
+    revocation->set_emit_system_revocation(true);
+    revocation->set_reason("Handler returned empty response for " +
+                           target_domain + "/" + target_command);
+    return biz_response;
+  }
+
+  std::string name_;
+  std::string domain_;
+  H handler_;
 };
 
 // ============================================================================
@@ -231,8 +243,8 @@ class CommandHandlerRouter {
  *
  * Example:
  * @code
- *   SagaRouter<OrderSagaHandler> router("saga-order-fulfillment", "order", "fulfillment",
- *                                       OrderSagaHandler());
+ *   SagaRouter<OrderSagaHandler> router("saga-order-fulfillment", "order",
+ * "fulfillment", OrderSagaHandler());
  *
  *   // Get subscriptions
  *   auto subs = router.subscriptions();
@@ -243,94 +255,115 @@ class CommandHandlerRouter {
  */
 template <typename H>
 class SagaRouter {
-    static_assert(std::is_base_of_v<SagaDomainHandler, H>, "H must derive from SagaDomainHandler");
+  static_assert(std::is_base_of_v<SagaDomainHandler, H>,
+                "H must derive from SagaDomainHandler");
 
-   public:
-    using Handler = H;
+ public:
+  using Handler = H;
 
-    /**
-     * Create a new saga router.
-     *
-     * @param name The router name (e.g., "saga-order-fulfillment")
-     * @param domain The input domain name (e.g., "order")
-     * @param target_domain The target domain where commands are sent (e.g., "fulfillment")
-     * @param handler The handler instance
-     */
-    SagaRouter(std::string name, std::string domain, std::string target_domain, H handler)
-        : name_(std::move(name)),
-          domain_(std::move(domain)),
-          target_domain_(std::move(target_domain)),
-          handler_(std::move(handler)) {}
+  /**
+   * Create a new saga router.
+   *
+   * @param name The router name (e.g., "saga-order-fulfillment")
+   * @param domain The input domain name (e.g., "order")
+   * @param target_domain The target domain where commands are sent (e.g.,
+   * "fulfillment")
+   * @param handler The handler instance
+   */
+  SagaRouter(std::string name, std::string domain, std::string target_domain,
+             H handler)
+      : name_(std::move(name)),
+        domain_(std::move(domain)),
+        target_domain_(std::move(target_domain)),
+        handler_(std::move(handler)) {}
 
-    /**
-     * Get the router name.
-     */
-    const std::string& name() const { return name_; }
+  /**
+   * Get the router name.
+   */
+  const std::string& name() const { return name_; }
 
-    /**
-     * Get the input domain.
-     */
-    const std::string& input_domain() const { return domain_; }
+  /**
+   * Get the input domain.
+   */
+  const std::string& input_domain() const { return domain_; }
 
-    /**
-     * Get the target domain (where commands are sent).
-     */
-    const std::string& target_domain() const { return target_domain_; }
+  /**
+   * Get the target domain (where commands are sent).
+   */
+  const std::string& target_domain() const { return target_domain_; }
 
-    /**
-     * Get event types from the handler.
-     */
-    std::vector<std::string> event_types() const { return handler_.event_types(); }
+  /**
+   * Get event types from the handler.
+   */
+  std::vector<std::string> event_types() const {
+    return handler_.event_types();
+  }
 
-    /**
-     * Get subscriptions for this saga.
-     *
-     * @return Vector of (domain, types) pairs
-     */
-    std::vector<std::pair<std::string, std::vector<std::string>>> subscriptions() const {
-        return {{domain_, handler_.event_types()}};
+  /**
+   * Get subscriptions for this saga.
+   *
+   * @return Vector of (domain, types) pairs
+   */
+  std::vector<std::pair<std::string, std::vector<std::string>>> subscriptions()
+      const {
+    return {{domain_, handler_.event_types()}};
+  }
+
+  /**
+   * Build a component descriptor for topology registration.
+   */
+  Descriptor descriptor() const {
+    return {name_, component_types::SAGA, {{domain_, handler_.event_types()}}};
+  }
+
+  /**
+   * Dispatch an event to the saga handler.
+   *
+   * @param source The source event book
+   * @param destinations Destination sequences for command stamping
+   * @return SagaResponse with commands
+   * @throws InvalidArgumentError if source is malformed
+   * @throws CommandRejectedError if execution fails
+   */
+  SagaResponse dispatch(const EventBook& source,
+                        const Destinations& destinations) {
+    if (source.pages_size() == 0) {
+      throw InvalidArgumentError("Source event book has no events");
     }
 
-    /**
-     * Build a component descriptor for topology registration.
-     */
-    Descriptor descriptor() const {
-        return {name_, component_types::SAGA, {{domain_, handler_.event_types()}}};
+    const auto& last_page = source.pages(source.pages_size() - 1);
+    if (!last_page.has_event()) {
+      throw InvalidArgumentError("Missing event payload");
     }
 
-    /**
-     * Dispatch an event to the saga handler.
-     *
-     * @param source The source event book
-     * @param destinations Fetched destination event books
-     * @return SagaResponse with commands
-     * @throws InvalidArgumentError if source is malformed
-     * @throws CommandRejectedError if execution fails
-     */
-    SagaResponse dispatch(const EventBook& source, const std::vector<EventBook>& destinations) {
-        if (source.pages_size() == 0) {
-            throw InvalidArgumentError("Source event book has no events");
-        }
+    auto result = handler_.execute(source, last_page.event(), destinations);
 
-        const auto& last_page = source.pages(source.pages_size() - 1);
-        if (!last_page.has_event()) {
-            throw InvalidArgumentError("Missing event payload");
-        }
-
-        auto result = handler_.execute(source, last_page.event(), destinations);
-
-        SagaResponse response;
-        for (auto& cmd : result.commands) {
-            *response.add_commands() = std::move(cmd);
-        }
-        return response;
+    SagaResponse response;
+    for (auto& cmd : result.commands) {
+      *response.add_commands() = std::move(cmd);
     }
+    return response;
+  }
 
-   private:
-    std::string name_;
-    std::string domain_;
-    std::string target_domain_;
-    H handler_;
+  /**
+   * Dispatch an event to the saga handler (legacy overload).
+   *
+   * @deprecated Use the Destinations overload instead.
+   * @param source The source event book
+   * @param destination_sequences Map of domain to next sequence number
+   * @return SagaResponse with commands
+   */
+  SagaResponse dispatch(
+      const EventBook& source,
+      const std::unordered_map<std::string, uint32_t>& destination_sequences) {
+    return dispatch(source, Destinations(destination_sequences));
+  }
+
+ private:
+  std::string name_;
+  std::string domain_;
+  std::string target_domain_;
+  H handler_;
 };
 
 // ============================================================================
@@ -338,7 +371,8 @@ class SagaRouter {
 // ============================================================================
 
 /**
- * Router for process manager components (events -> commands + PM events, multi-domain).
+ * Router for process manager components (events -> commands + PM events,
+ * multi-domain).
  *
  * Domains are registered via fluent `.domain()` calls.
  *
@@ -346,16 +380,17 @@ class SagaRouter {
  *
  * Example:
  * @code
- *   auto router = ProcessManagerRouter<HandFlowState>("pmg-hand-flow", "hand-flow",
- *       [](const EventBook* events) { return rebuild_hand_flow_state(events); })
- *       .domain("order", std::make_shared<OrderPmHandler>())
- *       .domain("inventory", std::make_shared<InventoryPmHandler>());
+ *   auto router = ProcessManagerRouter<HandFlowState>("pmg-hand-flow",
+ * "hand-flow",
+ *       [](const EventBook* events) { return rebuild_hand_flow_state(events);
+ * }) .domain("order", std::make_shared<OrderPmHandler>()) .domain("inventory",
+ * std::make_shared<InventoryPmHandler>());
  *
  *   // Get subscriptions
  *   auto subs = router.subscriptions();
  *
  *   // Prepare destinations
- *   auto covers = router.prepare_destinations(trigger, process_state);
+ *   // Destinations now arrive on the dispatch request from the coordinator.
  *
  *   // Dispatch event
  *   auto response = router.dispatch(trigger, process_state, destinations);
@@ -363,206 +398,208 @@ class SagaRouter {
  */
 template <typename S>
 class ProcessManagerRouter {
-   public:
-    using State = S;
-    using Rebuilder = std::function<S(const EventBook*)>;
-    using HandlerPtr = std::shared_ptr<ProcessManagerDomainHandler<S>>;
+ public:
+  using State = S;
+  using Rebuilder = std::function<S(const EventBook*)>;
+  using HandlerPtr = std::shared_ptr<ProcessManagerDomainHandler<S>>;
 
-    /**
-     * Create a new process manager router.
-     *
-     * @param name The router name (e.g., "pmg-hand-flow")
-     * @param pm_domain The PM's own domain for state storage (e.g., "hand-flow")
-     * @param rebuild Function to rebuild PM state from events
-     */
-    ProcessManagerRouter(std::string name, std::string pm_domain, Rebuilder rebuild)
-        : name_(std::move(name)), pm_domain_(std::move(pm_domain)), rebuild_(std::move(rebuild)) {}
+  /**
+   * Create a new process manager router.
+   *
+   * @param name The router name (e.g., "pmg-hand-flow")
+   * @param pm_domain The PM's own domain for state storage (e.g., "hand-flow")
+   * @param rebuild Function to rebuild PM state from events
+   */
+  ProcessManagerRouter(std::string name, std::string pm_domain,
+                       Rebuilder rebuild)
+      : name_(std::move(name)),
+        pm_domain_(std::move(pm_domain)),
+        rebuild_(std::move(rebuild)) {}
 
-    /**
-     * Register a domain handler.
-     *
-     * Process managers can have multiple input domains.
-     *
-     * @param domain_name The domain name (e.g., "order")
-     * @param handler The handler for this domain
-     * @return Reference to this router for chaining
-     */
-    ProcessManagerRouter& domain(std::string domain_name, HandlerPtr handler) {
-        domains_[std::move(domain_name)] = std::move(handler);
-        return *this;
+  /**
+   * Register a domain handler.
+   *
+   * Process managers can have multiple input domains.
+   *
+   * @param domain_name The domain name (e.g., "order")
+   * @param handler The handler for this domain
+   * @return Reference to this router for chaining
+   */
+  ProcessManagerRouter& domain(std::string domain_name, HandlerPtr handler) {
+    domains_[std::move(domain_name)] = std::move(handler);
+    return *this;
+  }
+
+  /**
+   * Get the router name.
+   */
+  const std::string& name() const { return name_; }
+
+  /**
+   * Get the PM's own domain (for state storage).
+   */
+  const std::string& pm_domain() const { return pm_domain_; }
+
+  /**
+   * Get subscriptions (domain + event types) for this PM.
+   *
+   * @return Vector of (domain, types) pairs
+   */
+  std::vector<std::pair<std::string, std::vector<std::string>>> subscriptions()
+      const {
+    std::vector<std::pair<std::string, std::vector<std::string>>> result;
+    for (const auto& [domain, handler] : domains_) {
+      result.emplace_back(domain, handler->event_types());
+    }
+    return result;
+  }
+
+  /**
+   * Build a component descriptor for topology registration.
+   */
+  Descriptor descriptor() const {
+    std::map<std::string, std::vector<std::string>> inputs;
+    for (const auto& [domain, handler] : domains_) {
+      inputs[domain] = handler->event_types();
+    }
+    return {name_, component_types::PROCESS_MANAGER, inputs};
+  }
+
+  /**
+   * Rebuild PM state from events.
+   */
+  S rebuild_state(const EventBook* events) const { return rebuild_(events); }
+
+  // prepare_destinations() was dropped — the contract no longer
+  // exposes a prepare phase. Destinations arrive on the dispatch
+  // request from the coordinator. Mirrors Python's 73f1f13 and
+  // Rust's 1691623.
+
+  /**
+   * Dispatch a trigger event to the appropriate handler.
+   *
+   * @param trigger The triggering event book
+   * @param process_state The PM's current state events
+   * @param destinations Fetched destination event books
+   * @return ProcessManagerHandleResponse with commands and PM events
+   * @throws InvalidArgumentError if trigger is malformed
+   * @throws CommandRejectedError if handling fails
+   */
+  ProcessManagerHandleResponse dispatch(
+      const EventBook& trigger, const EventBook* process_state,
+      const std::vector<EventBook>& destinations) {
+    std::string trigger_domain =
+        trigger.has_cover() ? trigger.cover().domain() : "";
+
+    auto it = domains_.find(trigger_domain);
+    if (it == domains_.end()) {
+      throw InvalidArgumentError("No handler for domain: " + trigger_domain);
     }
 
-    /**
-     * Get the router name.
-     */
-    const std::string& name() const { return name_; }
-
-    /**
-     * Get the PM's own domain (for state storage).
-     */
-    const std::string& pm_domain() const { return pm_domain_; }
-
-    /**
-     * Get subscriptions (domain + event types) for this PM.
-     *
-     * @return Vector of (domain, types) pairs
-     */
-    std::vector<std::pair<std::string, std::vector<std::string>>> subscriptions() const {
-        std::vector<std::pair<std::string, std::vector<std::string>>> result;
-        for (const auto& [domain, handler] : domains_) {
-            result.emplace_back(domain, handler->event_types());
-        }
-        return result;
+    if (trigger.pages_size() == 0) {
+      throw InvalidArgumentError("Trigger event book has no events");
     }
 
-    /**
-     * Build a component descriptor for topology registration.
-     */
-    Descriptor descriptor() const {
-        std::map<std::string, std::vector<std::string>> inputs;
-        for (const auto& [domain, handler] : domains_) {
-            inputs[domain] = handler->event_types();
-        }
-        return {name_, component_types::PROCESS_MANAGER, inputs};
+    const auto& last_page = trigger.pages(trigger.pages_size() - 1);
+    if (!last_page.has_event()) {
+      throw InvalidArgumentError("Missing event payload");
     }
 
-    /**
-     * Rebuild PM state from events.
-     */
-    S rebuild_state(const EventBook* events) const { return rebuild_(events); }
+    S state = rebuild_(process_state);
+    const auto& event_any = last_page.event();
 
-    /**
-     * Get destinations needed for the given trigger and process state.
-     *
-     * @param trigger The triggering event book (optional)
-     * @param process_state The PM's current state events (optional)
-     * @return Covers for destinations to fetch
-     */
-    std::vector<Cover> prepare_destinations(const EventBook* trigger,
-                                            const EventBook* process_state) {
-        if (!trigger || trigger->pages_size() == 0) {
-            return {};
-        }
-
-        std::string trigger_domain = trigger->has_cover() ? trigger->cover().domain() : "";
-
-        auto it = domains_.find(trigger_domain);
-        if (it == domains_.end()) {
-            return {};
-        }
-
-        const auto& last_page = trigger->pages(trigger->pages_size() - 1);
-        if (!last_page.has_event()) {
-            return {};
-        }
-
-        S state = rebuild_(process_state);
-        return it->second->prepare(*trigger, state, last_page.event());
+    // Check for Notification
+    if (helpers::type_url_matches(
+            event_any.type_url(),
+            "angzarr_client.proto.angzarr.Notification")) {
+      return dispatch_notification(it->second.get(), event_any, state);
     }
 
-    /**
-     * Dispatch a trigger event to the appropriate handler.
-     *
-     * @param trigger The triggering event book
-     * @param process_state The PM's current state events
-     * @param destinations Fetched destination event books
-     * @return ProcessManagerHandleResponse with commands and PM events
-     * @throws InvalidArgumentError if trigger is malformed
-     * @throws CommandRejectedError if handling fails
-     */
-    ProcessManagerHandleResponse dispatch(const EventBook& trigger, const EventBook* process_state,
-                                          const std::vector<EventBook>& destinations) {
-        std::string trigger_domain = trigger.has_cover() ? trigger.cover().domain() : "";
+    // Convert destination EventBooks to Destinations (domain -> next_sequence
+    // map)
+    std::unordered_map<std::string, uint32_t> seq_map;
+    for (const auto& book : destinations) {
+      seq_map[helpers::domain(book)] =
+          static_cast<uint32_t>(helpers::next_sequence(&book));
+    }
+    Destinations dest(std::move(seq_map));
 
-        auto it = domains_.find(trigger_domain);
-        if (it == domains_.end()) {
-            throw InvalidArgumentError("No handler for domain: " + trigger_domain);
-        }
+    auto response = it->second->handle(trigger, state, event_any, dest);
 
-        if (trigger.pages_size() == 0) {
-            throw InvalidArgumentError("Trigger event book has no events");
-        }
+    ProcessManagerHandleResponse pm_response;
+    for (auto& cmd : response.commands) {
+      *pm_response.add_commands() = std::move(cmd);
+    }
+    // Audit #92 (submodule 9de86c5): ProcessManagerHandleResponse.
+    // process_events became ``repeated EventBook`` so a PM can emit
+    // facts across its own future ticks in a single response. The
+    // C++ ProcessManagerResponse still carries a single EventBook
+    // for now (single-domain PM) — we append it as one entry in
+    // the repeated field.
+    if (response.process_events.has_value()) {
+      *pm_response.add_process_events() = std::move(*response.process_events);
+    }
+    return pm_response;
+  }
 
-        const auto& last_page = trigger.pages(trigger.pages_size() - 1);
-        if (!last_page.has_event()) {
-            throw InvalidArgumentError("Missing event payload");
-        }
-
-        S state = rebuild_(process_state);
-        const auto& event_any = last_page.event();
-
-        // Check for Notification
-        if (helpers::type_url_matches(event_any.type_url(), "angzarr.Notification")) {
-            return dispatch_notification(it->second.get(), event_any, state);
-        }
-
-        auto response = it->second->handle(trigger, state, event_any, destinations);
-
-        ProcessManagerHandleResponse pm_response;
-        for (auto& cmd : response.commands) {
-            *pm_response.add_commands() = std::move(cmd);
-        }
-        if (response.process_events.has_value()) {
-            *pm_response.mutable_process_events() = std::move(*response.process_events);
-        }
-        return pm_response;
+ private:
+  /**
+   * Dispatch a Notification to the handler's rejection handler.
+   */
+  ProcessManagerHandleResponse dispatch_notification(
+      ProcessManagerDomainHandler<S>* handler,
+      const google::protobuf::Any& event_any, const S& state) {
+    Notification notification;
+    if (!event_any.UnpackTo(&notification)) {
+      throw InvalidArgumentError("Failed to unpack Notification");
     }
 
-   private:
-    /**
-     * Dispatch a Notification to the handler's rejection handler.
-     */
-    ProcessManagerHandleResponse dispatch_notification(ProcessManagerDomainHandler<S>* handler,
-                                                       const google::protobuf::Any& event_any,
-                                                       const S& state) {
-        Notification notification;
-        if (!event_any.UnpackTo(&notification)) {
-            throw InvalidArgumentError("Failed to unpack Notification");
-        }
+    auto [target_domain, target_command] = extract_rejection_key(notification);
+    auto response = handler->on_rejected(notification, state, target_domain,
+                                         target_command);
 
-        auto [target_domain, target_command] = extract_rejection_key(notification);
-        auto response = handler->on_rejected(notification, state, target_domain, target_command);
-
-        ProcessManagerHandleResponse pm_response;
-        if (response.events.has_value()) {
-            *pm_response.mutable_process_events() = std::move(*response.events);
-        }
-        return pm_response;
+    ProcessManagerHandleResponse pm_response;
+    if (response.events.has_value()) {
+      // Audit #92: process_events is repeated; append the
+      // single compensation EventBook as one entry.
+      *pm_response.add_process_events() = std::move(*response.events);
     }
+    return pm_response;
+  }
 
-    /**
-     * Extract domain and command suffix from a rejection notification.
-     */
-    static std::pair<std::string, std::string> extract_rejection_key(
-        const Notification& notification) {
-        std::string domain;
-        std::string command_suffix;
+  /**
+   * Extract domain and command suffix from a rejection notification.
+   */
+  static std::pair<std::string, std::string> extract_rejection_key(
+      const Notification& notification) {
+    std::string domain;
+    std::string command_suffix;
 
-        if (notification.has_payload()) {
-            RejectionNotification rejection;
-            if (notification.payload().UnpackTo(&rejection)) {
-                if (rejection.has_rejected_command() &&
-                    rejection.rejected_command().pages_size() > 0) {
-                    const auto& rejected_cmd = rejection.rejected_command();
-                    domain = rejected_cmd.cover().domain();
-                    command_suffix =
-                        helpers::type_name_from_url(rejected_cmd.pages(0).command().type_url());
+    if (notification.has_payload()) {
+      RejectionNotification rejection;
+      if (notification.payload().UnpackTo(&rejection)) {
+        if (rejection.has_rejected_command() &&
+            rejection.rejected_command().pages_size() > 0) {
+          const auto& rejected_cmd = rejection.rejected_command();
+          domain = rejected_cmd.cover().domain();
+          command_suffix = helpers::type_name_from_url(
+              rejected_cmd.pages(0).command().type_url());
 
-                    // Extract simple type name
-                    auto dot_pos = command_suffix.rfind('.');
-                    if (dot_pos != std::string::npos) {
-                        command_suffix = command_suffix.substr(dot_pos + 1);
-                    }
-                }
-            }
+          // Extract simple type name
+          auto dot_pos = command_suffix.rfind('.');
+          if (dot_pos != std::string::npos) {
+            command_suffix = command_suffix.substr(dot_pos + 1);
+          }
         }
-        return {domain, command_suffix};
+      }
     }
+    return {domain, command_suffix};
+  }
 
-    std::string name_;
-    std::string pm_domain_;
-    Rebuilder rebuild_;
-    std::map<std::string, HandlerPtr> domains_;
+  std::string name_;
+  std::string pm_domain_;
+  Rebuilder rebuild_;
+  std::map<std::string, HandlerPtr> domains_;
 };
 
 // ============================================================================
@@ -588,80 +625,138 @@ class ProcessManagerRouter {
  * @endcode
  */
 class ProjectorRouter {
-   public:
-    using HandlerPtr = std::shared_ptr<ProjectorDomainHandler>;
+ public:
+  using HandlerPtr = std::shared_ptr<ProjectorDomainHandler>;
 
-    /**
-     * Create a new projector router.
-     *
-     * @param name The router name (e.g., "prj-output")
-     */
-    explicit ProjectorRouter(std::string name) : name_(std::move(name)) {}
+  /**
+   * Create a new projector router.
+   *
+   * @param name The router name (e.g., "prj-output")
+   */
+  explicit ProjectorRouter(std::string name) : name_(std::move(name)) {}
 
-    /**
-     * Register a domain handler.
-     *
-     * Projectors can have multiple input domains.
-     *
-     * @param domain_name The domain name (e.g., "player")
-     * @param handler The handler for this domain
-     * @return Reference to this router for chaining
-     */
-    ProjectorRouter& domain(std::string domain_name, HandlerPtr handler) {
-        domains_[std::move(domain_name)] = std::move(handler);
-        return *this;
+  /**
+   * Register a domain handler.
+   *
+   * Projectors can have multiple input domains.
+   *
+   * @param domain_name The domain name (e.g., "player")
+   * @param handler The handler for this domain
+   * @return Reference to this router for chaining
+   */
+  ProjectorRouter& domain(std::string domain_name, HandlerPtr handler) {
+    domains_[std::move(domain_name)] = std::move(handler);
+    return *this;
+  }
+
+  /**
+   * Get the router name.
+   */
+  const std::string& name() const { return name_; }
+
+  /**
+   * Get subscriptions (domain + event types) for this projector.
+   *
+   * @return Vector of (domain, types) pairs
+   */
+  std::vector<std::pair<std::string, std::vector<std::string>>> subscriptions()
+      const {
+    std::vector<std::pair<std::string, std::vector<std::string>>> result;
+    for (const auto& [domain, handler] : domains_) {
+      result.emplace_back(domain, handler->event_types());
+    }
+    return result;
+  }
+
+  /**
+   * Build a component descriptor for topology registration.
+   */
+  Descriptor descriptor() const {
+    std::map<std::string, std::vector<std::string>> inputs;
+    for (const auto& [domain, handler] : domains_) {
+      inputs[domain] = handler->event_types();
+    }
+    return {name_, component_types::PROJECTOR, inputs};
+  }
+
+  /**
+   * Dispatch events to the appropriate handler.
+   *
+   * @param events The event book to project
+   * @return Projection result
+   * @throws InvalidArgumentError if no handler for domain
+   */
+  Projection dispatch(const EventBook& events) {
+    std::string domain = events.has_cover() ? events.cover().domain() : "";
+
+    auto it = domains_.find(domain);
+    if (it == domains_.end()) {
+      throw InvalidArgumentError("No handler for domain: " + domain);
     }
 
-    /**
-     * Get the router name.
-     */
-    const std::string& name() const { return name_; }
+    return it->second->project(events);
+  }
 
-    /**
-     * Get subscriptions (domain + event types) for this projector.
-     *
-     * @return Vector of (domain, types) pairs
-     */
-    std::vector<std::pair<std::string, std::vector<std::string>>> subscriptions() const {
-        std::vector<std::pair<std::string, std::vector<std::string>>> result;
-        for (const auto& [domain, handler] : domains_) {
-            result.emplace_back(domain, handler->event_types());
-        }
-        return result;
+  /**
+   * Dispatch events with a catch-all hook for unmatched type URLs.
+   *
+   * Rust commit 804c362 / audit catch-all parity:
+   *
+   * - If the event's ``cover.domain`` doesn't match any registered
+   *   handler, this is a topology bug; falls through to
+   *   :func:`dispatch` (which throws ``InvalidArgumentError``).
+   * - If the domain matches but the event's ``type_url`` doesn't
+   *   match any of the handler's declared ``event_types()``, a
+   *   structured WARN log fires (``projector_unknown_event``) AND
+   *   any catch-all hook registered via
+   *   ``ProjectorDomainHandler::set_unknown_handler`` is invoked
+   *   with the offending type URL. Without a catch-all the WARN
+   *   still fires; dispatch is a no-op past that point, matching
+   *   Rust's "warn + no-op" default.
+   * - If every event in the book has a matching type, dispatch
+   *   proceeds normally.
+   */
+  void dispatch_or_warn(const EventBook& events) {
+    std::string domain = events.has_cover() ? events.cover().domain() : "";
+    auto it = domains_.find(domain);
+    if (it == domains_.end()) {
+      throw InvalidArgumentError("No handler for domain: " + domain);
+    }
+    auto& handler = it->second;
+
+    // Build the set of fully-qualified type URLs the handler
+    // declares. ``event_types()`` returns the full proto name
+    // (post-audit #25 — no suffix matching).
+    std::set<std::string> known;
+    for (const auto& t : handler->event_types()) {
+      known.insert(helpers::type_url(t));
     }
 
-    /**
-     * Build a component descriptor for topology registration.
-     */
-    Descriptor descriptor() const {
-        std::map<std::string, std::vector<std::string>> inputs;
-        for (const auto& [domain, handler] : domains_) {
-            inputs[domain] = handler->event_types();
-        }
-        return {name_, component_types::PROJECTOR, inputs};
+    bool any_known = false;
+    for (const auto& page : events.pages()) {
+      if (!page.has_event()) continue;
+      const auto& url = page.event().type_url();
+      if (known.count(url)) {
+        any_known = true;
+      } else {
+        log_warn("projector_unknown_event",
+                 {{"projector", name_}, {"type_url", url}});
+        handler->dispatch_unknown(url);
+      }
     }
 
-    /**
-     * Dispatch events to the appropriate handler.
-     *
-     * @param events The event book to project
-     * @return Projection result
-     * @throws InvalidArgumentError if no handler for domain
-     */
-    Projection dispatch(const EventBook& events) {
-        std::string domain = events.has_cover() ? events.cover().domain() : "";
-
-        auto it = domains_.find(domain);
-        if (it == domains_.end()) {
-            throw InvalidArgumentError("No handler for domain: " + domain);
-        }
-
-        return it->second->project(events);
+    if (any_known) {
+      // Only invoke ``project()`` when at least one event in
+      // the book maps to a known arm — calling project for an
+      // all-unknown book would force user code to handle two
+      // notification paths.
+      (void)handler->project(events);
     }
+  }
 
-   private:
-    std::string name_;
-    std::map<std::string, HandlerPtr> domains_;
+ private:
+  std::string name_;
+  std::map<std::string, HandlerPtr> domains_;
 };
 
 // ============================================================================
@@ -679,9 +774,11 @@ class ProjectorRouter {
  * @return CommandHandlerRouter instance
  */
 template <typename S, typename H>
-CommandHandlerRouter<S, H> make_command_handler_router(std::string name, std::string domain,
+CommandHandlerRouter<S, H> make_command_handler_router(std::string name,
+                                                       std::string domain,
                                                        H handler) {
-    return CommandHandlerRouter<S, H>(std::move(name), std::move(domain), std::move(handler));
+  return CommandHandlerRouter<S, H>(std::move(name), std::move(domain),
+                                    std::move(handler));
 }
 
 /**
@@ -695,10 +792,10 @@ CommandHandlerRouter<S, H> make_command_handler_router(std::string name, std::st
  * @return SagaRouter instance
  */
 template <typename H>
-SagaRouter<H> make_saga_router(std::string name, std::string domain, std::string target_domain,
-                                H handler) {
-    return SagaRouter<H>(std::move(name), std::move(domain), std::move(target_domain),
-                          std::move(handler));
+SagaRouter<H> make_saga_router(std::string name, std::string domain,
+                               std::string target_domain, H handler) {
+  return SagaRouter<H>(std::move(name), std::move(domain),
+                       std::move(target_domain), std::move(handler));
 }
 
 /**
@@ -711,9 +808,11 @@ SagaRouter<H> make_saga_router(std::string name, std::string domain, std::string
  * @return ProcessManagerRouter instance
  */
 template <typename S>
-ProcessManagerRouter<S> make_pm_router(std::string name, std::string pm_domain,
-                                       typename ProcessManagerRouter<S>::Rebuilder rebuild) {
-    return ProcessManagerRouter<S>(std::move(name), std::move(pm_domain), std::move(rebuild));
+ProcessManagerRouter<S> make_pm_router(
+    std::string name, std::string pm_domain,
+    typename ProcessManagerRouter<S>::Rebuilder rebuild) {
+  return ProcessManagerRouter<S>(std::move(name), std::move(pm_domain),
+                                 std::move(rebuild));
 }
 
 /**
@@ -723,7 +822,7 @@ ProcessManagerRouter<S> make_pm_router(std::string name, std::string pm_domain,
  * @return ProjectorRouter instance
  */
 inline ProjectorRouter make_projector_router(std::string name) {
-    return ProjectorRouter(std::move(name));
+  return ProjectorRouter(std::move(name));
 }
 
 // ============================================================================
@@ -736,8 +835,10 @@ using AggregateRouter = CommandHandlerRouter<S, H>;
 
 /// @deprecated Use make_command_handler_router instead
 template <typename S, typename H>
-AggregateRouter<S, H> make_aggregate_router(std::string name, std::string domain, H handler) {
-    return CommandHandlerRouter<S, H>(std::move(name), std::move(domain), std::move(handler));
+AggregateRouter<S, H> make_aggregate_router(std::string name,
+                                            std::string domain, H handler) {
+  return CommandHandlerRouter<S, H>(std::move(name), std::move(domain),
+                                    std::move(handler));
 }
 
 }  // namespace angzarr

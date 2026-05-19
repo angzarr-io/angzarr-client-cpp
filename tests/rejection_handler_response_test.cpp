@@ -6,7 +6,7 @@
 
 #include "angzarr/process_manager.hpp"
 #include "angzarr/router.hpp"
-#include "angzarr/types.pb.h"
+#include "angzarr/proto_aliases.hpp"
 
 using namespace angzarr;
 

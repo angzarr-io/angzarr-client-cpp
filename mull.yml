@@ -1,0 +1,20 @@
+# mull-runner configuration for D-C++ Phase D pass.
+#
+# Without scoping, mull mutates every file linked into the test
+# binary (including pre-existing ``readiness.cpp`` / ``helpers.cpp``
+# paths that aren't exercised by the D-C++ convergence tests) and
+# reports a misleadingly low kill rate. ``includePaths`` constrains
+# mutation generation to the files touched by D-C++ via regex.
+
+includePaths:
+  - "src/identity\\.cpp"
+  - "src/transport\\.cpp"
+  - "src/server\\.cpp"
+  - "src/grpc_translator\\.cpp"
+  - "include/angzarr/identity\\.hpp"
+  - "include/angzarr/transport\\.hpp"
+  - "include/angzarr/server\\.hpp"
+  - "include/angzarr/grpc_translator\\.hpp"
+  - "include/angzarr/unified_router\\.hpp"
+  - "include/angzarr/builder\\.hpp"
+  - "include/angzarr/retry\\.hpp"

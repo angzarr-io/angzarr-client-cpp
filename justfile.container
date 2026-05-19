@@ -10,8 +10,30 @@ ROOT := `git rev-parse --show-toplevel`
 default:
     @just --list
 
-proto:
-    cmake -B build && cmake --build build --target angzarr-client
+# =============================================================================
+# Proto generation — container-side executor.
+# =============================================================================
+# `just generate-proto` (host-side) is the canonical entrypoint and handles
+# the staleness check + container dispatch. Inside the container this recipe
+# runs the protoc invocation via CMake's `add_custom_command` rules by
+# building the `angzarr-client` target — that target's proto .pb.{cc,h}
+# prerequisites trigger the custom commands. We configure first so the
+# `build/` dir exists; the configure step is idempotent.
+generate-proto-force:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cmake -B build -DCMAKE_BUILD_TYPE=Release
+    # Drive the `proto_gen` aggregator custom-target (declared in
+    # CMakeLists.txt). It depends on all .pb.{cc,h}/.grpc.pb.{cc,h} outputs
+    # of `add_custom_command(OUTPUT … COMMAND protobuf::protoc …)` so the
+    # protoc invocations run WITHOUT compiling the library or tests. Keeps
+    # the regen entrypoint outside the main build graph per
+    # project_proto_generation_model.
+    cmake --build build --target proto_gen
+
+# Legacy in-container alias for proto generation (host-side `just proto`
+# routed here historically). Calls the canonical force recipe.
+proto: generate-proto-force
 
 configure:
     cmake -B build -DCMAKE_BUILD_TYPE=Release
@@ -31,6 +53,13 @@ fmt-fix:
     find src include -name "*.cpp" -o -name "*.hpp" | xargs clang-format -i --style=Google
 
 # Run Mull mutation testing on combined test binary
+#
+# NOTE: Mull mutates compiled LLVM IR, NOT .cpp/.hpp source. The host-side
+# `mutation-test` recipe routes through `_container-ephemeral` so the
+# build-mull/ tree lives in the container's writable overlay layer and is
+# destroyed by `--rm` on exit. If $CCACHE_DIR is set (provided by the
+# ephemeral helper as /ccache) and ccache is available, we wire it as the
+# compiler launcher to keep mutation iteration fast across runs.
 mutation-test:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -40,10 +69,16 @@ mutation-test:
         exit 1
     fi
     echo "Running Mull mutation testing ($($MULL --version 2>&1 | head -1))..."
+    CCACHE_ARGS=()
+    if command -v ccache >/dev/null 2>&1 && [ -n "${CCACHE_DIR:-}" ]; then
+        CCACHE_ARGS=(-DCMAKE_C_COMPILER_LAUNCHER=ccache
+                     -DCMAKE_CXX_COMPILER_LAUNCHER=ccache)
+    fi
     # Build with clang-17 + debug info so mull can read LLVM IR
     cmake -B build-mull -DCMAKE_C_COMPILER=clang-17 \
         -DCMAKE_CXX_COMPILER=clang++-17 \
-        -DCMAKE_CXX_FLAGS="-g -grecord-command-line -w"
+        -DCMAKE_CXX_FLAGS="-g -grecord-command-line -w" \
+        "${CCACHE_ARGS[@]}"
     cmake --build build-mull -j$(nproc) --target mutation_tests
     $MULL --reporters Elements build-mull/mutation_tests 2>&1 || true
     echo "Mutation testing complete."
@@ -52,3 +87,9 @@ mutation-test:
 archive VERSION:
     cd {{ROOT}} && git archive --format=tar.gz --prefix=angzarr-client-cpp-{{VERSION}}/ -o client/cpp/angzarr-client-cpp-{{VERSION}}.tar.gz HEAD:client/cpp
     sha512sum angzarr-client-cpp-{{VERSION}}.tar.gz > angzarr-client-cpp-{{VERSION}}.tar.gz.sha512
+
+# Cross-language alias — `just check` runs lint + fmt-check.
+check: fmt
+
+# Cross-language alias — `just lint` placeholder (C++ uses fmt-check only).
+lint: fmt

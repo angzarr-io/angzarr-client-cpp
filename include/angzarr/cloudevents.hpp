@@ -10,8 +10,7 @@
 #include <utility>
 #include <vector>
 
-#include "angzarr/proto.hpp"
-#include "angzarr/proto.hpp"
+#include "angzarr/proto_aliases.hpp"
 #include "descriptor.hpp"
 #include "helpers.hpp"
 
@@ -34,9 +33,8 @@ namespace angzarr {
  *       PlayerCloudEventsProjector()
  *           : CloudEventsProjector("prj-player-cloudevents", "player") {}
  *
- *       std::optional<CloudEvent> on_player_registered(const PlayerRegistered& event) {
- *           CloudEvent ce;
- *           ce.set_type("com.poker.player.registered");
+ *       std::optional<CloudEvent> on_player_registered(const PlayerRegistered&
+ * event) { CloudEvent ce; ce.set_type("com.poker.player.registered");
  *           ce.mutable_data()->PackFrom(public_event);
  *           return ce;
  *       }
@@ -44,36 +42,38 @@ namespace angzarr {
  * @endcode
  */
 class CloudEventsProjector {
-   public:
-    /**
-     * Create a CloudEvents projector.
-     *
-     * @param name The projector name (e.g., "prj-player-cloudevents")
-     * @param domain The input domain (e.g., "player")
-     */
-    CloudEventsProjector(std::string name, std::string domain)
-        : name_(std::move(name)), domain_(std::move(domain)) {}
+ public:
+  /**
+   * Create a CloudEvents projector.
+   *
+   * @param name The projector name (e.g., "prj-player-cloudevents")
+   * @param domain The input domain (e.g., "player")
+   */
+  CloudEventsProjector(std::string name, std::string domain)
+      : name_(std::move(name)), domain_(std::move(domain)) {}
 
-    virtual ~CloudEventsProjector() = default;
+  virtual ~CloudEventsProjector() = default;
 
-    /**
-     * Get the projector name.
-     */
-    const std::string& name() const { return name_; }
+  /**
+   * Get the projector name.
+   */
+  const std::string& name() const { return name_; }
 
-    /**
-     * Get the input domain.
-     */
-    const std::string& domain() const { return domain_; }
+  /**
+   * Get the input domain.
+   */
+  const std::string& domain() const { return domain_; }
 
-    /**
-     * Build a component descriptor for topology registration.
-     */
-    Descriptor descriptor() const { return {name_, component_types::PROJECTOR, {{domain_, {}}}}; }
+  /**
+   * Build a component descriptor for topology registration.
+   */
+  Descriptor descriptor() const {
+    return {name_, component_types::PROJECTOR, {{domain_, {}}}};
+  }
 
-   private:
-    std::string name_;
-    std::string domain_;
+ private:
+  std::string name_;
+  std::string domain_;
 };
 
 // ============================================================================
@@ -100,109 +100,111 @@ using CloudEventsHandler = std::function<std::optional<CloudEvent>(const T&)>;
  * @endcode
  */
 class CloudEventsRouter {
-   public:
-    using BoxedHandler = std::function<std::optional<CloudEvent>(const google::protobuf::Any&)>;
+ public:
+  using BoxedHandler =
+      std::function<std::optional<CloudEvent>(const google::protobuf::Any&)>;
 
-    /**
-     * Create a new CloudEvents router.
-     *
-     * @param name The projector name (e.g., "prj-player-cloudevents")
-     * @param domain The input domain (e.g., "player")
-     */
-    CloudEventsRouter(std::string name, std::string domain)
-        : name_(std::move(name)), domain_(std::move(domain)) {}
+  /**
+   * Create a new CloudEvents router.
+   *
+   * @param name The projector name (e.g., "prj-player-cloudevents")
+   * @param domain The input domain (e.g., "player")
+   */
+  CloudEventsRouter(std::string name, std::string domain)
+      : name_(std::move(name)), domain_(std::move(domain)) {}
 
-    /**
-     * Register a handler for an event type.
-     *
-     * The event type is automatically inferred from the handler's parameter type.
-     *
-     * @tparam T The protobuf event type
-     * @param handler Function that transforms the event into a CloudEvent
-     * @return Reference to this router for chaining
-     *
-     * Example:
-     * @code
-     *   router.on<PlayerRegistered>([](const PlayerRegistered& event) {
-     *       CloudEvent ce;
-     *       ce.set_type("com.poker.player.registered");
-     *       return ce;
-     *   });
-     * @endcode
-     */
-    template <typename T>
-    CloudEventsRouter& on(CloudEventsHandler<T> handler) {
-        std::string suffix = T::descriptor()->name();
-        handlers_[suffix] = [handler = std::move(handler)](
-                                const google::protobuf::Any& any) -> std::optional<CloudEvent> {
-            T event;
-            if (!any.UnpackTo(&event)) {
-                return std::nullopt;
-            }
-            return handler(event);
-        };
-        return *this;
+  /**
+   * Register a handler for an event type.
+   *
+   * The event type is automatically inferred from the handler's parameter type.
+   *
+   * @tparam T The protobuf event type
+   * @param handler Function that transforms the event into a CloudEvent
+   * @return Reference to this router for chaining
+   *
+   * Example:
+   * @code
+   *   router.on<PlayerRegistered>([](const PlayerRegistered& event) {
+   *       CloudEvent ce;
+   *       ce.set_type("com.poker.player.registered");
+   *       return ce;
+   *   });
+   * @endcode
+   */
+  template <typename T>
+  CloudEventsRouter& on(CloudEventsHandler<T> handler) {
+    std::string suffix = T::descriptor()->full_name();
+    handlers_[suffix] =
+        [handler = std::move(handler)](
+            const google::protobuf::Any& any) -> std::optional<CloudEvent> {
+      T event;
+      if (!any.UnpackTo(&event)) {
+        return std::nullopt;
+      }
+      return handler(event);
+    };
+    return *this;
+  }
+
+  /**
+   * Get the projector name.
+   */
+  const std::string& name() const { return name_; }
+
+  /**
+   * Get the input domain.
+   */
+  const std::string& domain() const { return domain_; }
+
+  /**
+   * Get the event types this router handles.
+   */
+  std::vector<std::string> event_types() const {
+    std::vector<std::string> types;
+    for (const auto& [suffix, _] : handlers_) {
+      types.push_back(suffix);
     }
+    return types;
+  }
 
-    /**
-     * Get the projector name.
-     */
-    const std::string& name() const { return name_; }
+  /**
+   * Build a component descriptor for topology registration.
+   */
+  Descriptor descriptor() const {
+    return {name_, component_types::PROJECTOR, {{domain_, event_types()}}};
+  }
 
-    /**
-     * Get the input domain.
-     */
-    const std::string& domain() const { return domain_; }
+  /**
+   * Project an EventBook into CloudEvents.
+   *
+   * @param source The source EventBook containing domain events
+   * @return CloudEventsResponse containing the transformed CloudEvents
+   */
+  CloudEventsResponse project(const EventBook& source) const {
+    CloudEventsResponse response;
 
-    /**
-     * Get the event types this router handles.
-     */
-    std::vector<std::string> event_types() const {
-        std::vector<std::string> types;
-        for (const auto& [suffix, _] : handlers_) {
-            types.push_back(suffix);
+    for (const auto& page : source.pages()) {
+      if (!page.has_event()) continue;
+
+      const auto& event_any = page.event();
+      std::string suffix = helpers::type_name_from_url(event_any.type_url());
+
+      auto it = handlers_.find(suffix);
+      if (it != handlers_.end()) {
+        auto cloud_event = it->second(event_any);
+        if (cloud_event.has_value()) {
+          *response.add_events() = std::move(*cloud_event);
         }
-        return types;
+      }
     }
 
-    /**
-     * Build a component descriptor for topology registration.
-     */
-    Descriptor descriptor() const {
-        return {name_, component_types::PROJECTOR, {{domain_, event_types()}}};
-    }
+    return response;
+  }
 
-    /**
-     * Project an EventBook into CloudEvents.
-     *
-     * @param source The source EventBook containing domain events
-     * @return CloudEventsResponse containing the transformed CloudEvents
-     */
-    CloudEventsResponse project(const EventBook& source) const {
-        CloudEventsResponse response;
-
-        for (const auto& page : source.pages()) {
-            if (!page.has_event()) continue;
-
-            const auto& event_any = page.event();
-            std::string suffix = helpers::type_name_from_url(event_any.type_url());
-
-            auto it = handlers_.find(suffix);
-            if (it != handlers_.end()) {
-                auto cloud_event = it->second(event_any);
-                if (cloud_event.has_value()) {
-                    *response.add_events() = std::move(*cloud_event);
-                }
-            }
-        }
-
-        return response;
-    }
-
-   private:
-    std::string name_;
-    std::string domain_;
-    std::map<std::string, BoxedHandler> handlers_;
+ private:
+  std::string name_;
+  std::string domain_;
+  std::map<std::string, BoxedHandler> handlers_;
 };
 
 // ============================================================================
@@ -227,6 +229,7 @@ class CloudEventsRouter {
  *   run_cloudevents_projector("prj-player-cloudevents", 50091, router);
  * @endcode
  */
-void run_cloudevents_projector(const std::string& name, int port, const CloudEventsRouter& router);
+void run_cloudevents_projector(const std::string& name, int port,
+                               const CloudEventsRouter& router);
 
 }  // namespace angzarr
