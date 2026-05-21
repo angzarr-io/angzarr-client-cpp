@@ -22,14 +22,15 @@
  *            applies(&Player::apply_registered);
  *        }
  *        PlayerRegistered register_player(const RegisterPlayer& cmd);
- *        void apply_registered(PlayerState& state, const PlayerRegistered& event);
+ *        void apply_registered(PlayerState& state, const PlayerRegistered&
+ * event);
  *    };
  *    @endcode
  *
  * 2. Functional Router Pattern:
  *    @code
- *    auto rebuild = [](const EventBook* events) { return rebuild_state(events); };
- *    CommandRouter<PlayerState> router("player", rebuild);
+ *    auto rebuild = [](const EventBook* events) { return rebuild_state(events);
+ * }; CommandRouter<PlayerState> router("player", rebuild);
  *    router.on("RegisterPlayer", handle_register);
  *    @endcode
  */
@@ -41,7 +42,8 @@
 namespace angzarr {
 
 // Aggregate is an alias for command handler in CQRS/ES terminology.
-// The CommandHandlerBase and CommandRouter classes provide aggregate functionality.
+// The CommandHandlerBase and CommandRouter classes provide aggregate
+// functionality.
 
 /**
  * @deprecated Use CommandHandlerBase<State, Derived> instead.

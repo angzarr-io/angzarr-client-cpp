@@ -166,7 +166,7 @@ TEST(CompensationContextMirror, DispatchKey_DomainSlashCommand_OnSuccess) {
     auto notif = MakeRejectionNotification(&cmd, "");
     auto ctx = CompensationContext::from_notification(notif);
     // type_name_from_url strips the leading "type.googleapis.com/" prefix.
-    EXPECT_EQ(ctx.dispatch_key(), "inventory/angzarr_client.proto.angzarr.Cover");
+    EXPECT_EQ(ctx.dispatch_key(), "inventory/angzarr_client.proto.angzarr.v1.Cover");
 }
 
 // ============================================================================

@@ -120,7 +120,7 @@ class CommandRouter {
 
     // Check for Notification (fully qualified: angzarr.Notification)
     if (helpers::type_url_matches(
-            type_url, "angzarr_client.proto.angzarr.Notification")) {
+            type_url, "angzarr_client.proto.angzarr.v1.Notification")) {
       Notification notification;
       command_any.UnpackTo(&notification);
       return dispatch_rejection(notification, state);

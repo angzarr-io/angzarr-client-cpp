@@ -139,7 +139,7 @@ class CommandHandlerRouter {
 
     // Check for Notification (rejection/compensation)
     if (helpers::type_url_matches(
-            type_url, "angzarr_client.proto.angzarr.Notification")) {
+            type_url, "angzarr_client.proto.angzarr.v1.Notification")) {
       return dispatch_notification(command_any, state);
     }
 
@@ -511,7 +511,7 @@ class ProcessManagerRouter {
     // Check for Notification
     if (helpers::type_url_matches(
             event_any.type_url(),
-            "angzarr_client.proto.angzarr.Notification")) {
+            "angzarr_client.proto.angzarr.v1.Notification")) {
       return dispatch_notification(it->second.get(), event_any, state);
     }
 

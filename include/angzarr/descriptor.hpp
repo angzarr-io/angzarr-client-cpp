@@ -21,9 +21,9 @@ constexpr const char* PROCESS_MANAGER = "process_manager";
  * Describes a component's name, type, and input subscriptions.
  */
 struct Descriptor {
-    std::string name;
-    std::string component_type;
-    std::map<std::string, std::vector<std::string>> inputs;
+  std::string name;
+  std::string component_type;
+  std::map<std::string, std::vector<std::string>> inputs;
 };
 
 }  // namespace angzarr

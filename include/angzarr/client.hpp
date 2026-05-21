@@ -130,10 +130,37 @@ class QueryClient {
   /**
    * Create a client from an existing channel.
    *
+   * Channel lifetime is managed via shared_ptr reference counting — the
+   * caller may share ownership with this client.
+   *
    * @param channel Shared gRPC channel
    */
   explicit QueryClient(std::shared_ptr<grpc::Channel> channel)
-      : stub_(EventQueryService::NewStub(channel)) {}
+      : channel_(std::move(channel)),
+        stub_(EventQueryService::NewStub(channel_)) {}
+
+  /**
+   * Create a client from a caller-managed channel.
+   *
+   * Named factory equivalent to the shared-channel constructor; provided for
+   * naming parity with Python ``QueryClient.from_channel``, Go
+   * ``QueryClientFromConn``, Java/C# ``FromChannel``, Rust
+   * ``QueryClient::from_channel``.
+   */
+  static std::unique_ptr<QueryClient> from_channel(
+      std::shared_ptr<grpc::Channel> channel) {
+    return std::make_unique<QueryClient>(std::move(channel));
+  }
+
+  /**
+   * Release the stub and drop this client's reference to the channel.
+   * Idempotent and safe to call multiple times. After ``close()`` further
+   * RPCs are undefined; mirror of Python ``close()`` / Rust ``close``.
+   */
+  void close() {
+    stub_.reset();
+    channel_.reset();
+  }
 
   /**
    * Query events for an aggregate and return a single EventBook.
@@ -184,6 +211,7 @@ class QueryClient {
   inline QueryBuilder query_domain(const std::string& domain);
 
  private:
+  std::shared_ptr<grpc::Channel> channel_;
   std::unique_ptr<EventQueryService::Stub> stub_;
 
   static std::string format_endpoint(const std::string& endpoint) {
@@ -250,7 +278,27 @@ class CommandHandlerClient {
    * @param channel Shared gRPC channel
    */
   explicit CommandHandlerClient(std::shared_ptr<grpc::Channel> channel)
-      : stub_(CommandHandlerCoordinatorService::NewStub(channel)) {}
+      : channel_(std::move(channel)),
+        stub_(CommandHandlerCoordinatorService::NewStub(channel_)) {}
+
+  /**
+   * Create a client from a caller-managed channel. Named factory mirroring
+   * Python ``CommandHandlerClient.from_channel``, Rust
+   * ``CommandHandlerClient::from_channel``.
+   */
+  static std::unique_ptr<CommandHandlerClient> from_channel(
+      std::shared_ptr<grpc::Channel> channel) {
+    return std::make_unique<CommandHandlerClient>(std::move(channel));
+  }
+
+  /**
+   * Release the stub and drop this client's reference to the channel.
+   * Idempotent and safe to call multiple times.
+   */
+  void close() {
+    stub_.reset();
+    channel_.reset();
+  }
 
   /**
    * Execute a command asynchronously (fire-and-forget).
@@ -353,6 +401,7 @@ class CommandHandlerClient {
   inline CommandBuilder command_new(const std::string& domain);
 
  private:
+  std::shared_ptr<grpc::Channel> channel_;
   std::unique_ptr<CommandHandlerCoordinatorService::Stub> stub_;
 
   static std::string format_endpoint(const std::string& endpoint) {
@@ -383,10 +432,33 @@ class SpeculativeClient {
   }
 
   explicit SpeculativeClient(std::shared_ptr<grpc::Channel> channel)
-      : ch_stub_(CommandHandlerCoordinatorService::NewStub(channel)),
-        projector_stub_(ProjectorCoordinatorService::NewStub(channel)),
-        saga_stub_(SagaCoordinatorService::NewStub(channel)),
-        pm_stub_(ProcessManagerCoordinatorService::NewStub(channel)) {}
+      : channel_(std::move(channel)),
+        ch_stub_(CommandHandlerCoordinatorService::NewStub(channel_)),
+        projector_stub_(ProjectorCoordinatorService::NewStub(channel_)),
+        saga_stub_(SagaCoordinatorService::NewStub(channel_)),
+        pm_stub_(ProcessManagerCoordinatorService::NewStub(channel_)) {}
+
+  /**
+   * Create a client from a caller-managed channel. Named factory mirroring
+   * Python ``SpeculativeClient.from_channel``, Rust
+   * ``SpeculativeClient::from_channel``.
+   */
+  static std::unique_ptr<SpeculativeClient> from_channel(
+      std::shared_ptr<grpc::Channel> channel) {
+    return std::make_unique<SpeculativeClient>(std::move(channel));
+  }
+
+  /**
+   * Release all stubs and drop this client's reference to the channel.
+   * Idempotent and safe to call multiple times.
+   */
+  void close() {
+    ch_stub_.reset();
+    projector_stub_.reset();
+    saga_stub_.reset();
+    pm_stub_.reset();
+    channel_.reset();
+  }
 
   CommandResponse command_handler(
       const SpeculateCommandHandlerRequest& request) {
@@ -402,9 +474,9 @@ class SpeculativeClient {
   // Returns the proto Projection (cover/projector/sequence/payload),
   // not the in-memory key/value helper struct of the same simple
   // name in :file:`handler_traits.hpp`. Fully qualified to disambiguate.
-  ::angzarr_client::proto::angzarr::Projection projector(
+  ::angzarr_client::proto::angzarr::v1::Projection projector(
       const SpeculateProjectorRequest& request) {
-    ::angzarr_client::proto::angzarr::Projection response;
+    ::angzarr_client::proto::angzarr::v1::Projection response;
     grpc::ClientContext context;
     auto status =
         projector_stub_->HandleSpeculative(&context, request, &response);
@@ -436,6 +508,7 @@ class SpeculativeClient {
   }
 
  private:
+  std::shared_ptr<grpc::Channel> channel_;
   std::unique_ptr<CommandHandlerCoordinatorService::Stub> ch_stub_;
   std::unique_ptr<ProjectorCoordinatorService::Stub> projector_stub_;
   std::unique_ptr<SagaCoordinatorService::Stub> saga_stub_;
@@ -498,9 +571,30 @@ class DomainClient {
    * @param channel Shared gRPC channel
    */
   explicit DomainClient(std::shared_ptr<grpc::Channel> channel)
-      : command_handler_(std::make_unique<CommandHandlerClient>(channel)),
-        query_(std::make_unique<QueryClient>(channel)),
-        speculative_(std::make_unique<SpeculativeClient>(channel)) {}
+      : channel_(std::move(channel)),
+        command_handler_(std::make_unique<CommandHandlerClient>(channel_)),
+        query_(std::make_unique<QueryClient>(channel_)),
+        speculative_(std::make_unique<SpeculativeClient>(channel_)) {}
+
+  /**
+   * Create a client from a caller-managed channel. Named factory mirroring
+   * Python ``DomainClient.from_channel``, Rust ``DomainClient::from_channel``.
+   */
+  static std::unique_ptr<DomainClient> from_channel(
+      std::shared_ptr<grpc::Channel> channel) {
+    return std::make_unique<DomainClient>(std::move(channel));
+  }
+
+  /**
+   * Release all sub-clients and drop this client's reference to the channel.
+   * Idempotent and safe to call multiple times.
+   */
+  void close() {
+    if (command_handler_) command_handler_->close();
+    if (query_) query_->close();
+    if (speculative_) speculative_->close();
+    channel_.reset();
+  }
 
   /**
    * Get the command handler client for command execution.
@@ -540,6 +634,7 @@ class DomainClient {
   inline QueryBuilder query_domain(const std::string& domain);
 
  private:
+  std::shared_ptr<grpc::Channel> channel_;
   std::unique_ptr<CommandHandlerClient> command_handler_;
   std::unique_ptr<QueryClient> query_;
   std::unique_ptr<SpeculativeClient> speculative_;

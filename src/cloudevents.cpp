@@ -23,7 +23,7 @@ class CloudEventsProjectorService final : public ProjectorService::Service {
 
   grpc::Status Handle(
       grpc::ServerContext* context, const EventBook* request,
-      ::angzarr_client::proto::angzarr::Projection* response) override {
+      ::angzarr_client::proto::angzarr::v1::Projection* response) override {
     (void)context;
 
     // Transform events to CloudEvents
@@ -40,7 +40,7 @@ class CloudEventsProjectorService final : public ProjectorService::Service {
 
   grpc::Status HandleSpeculative(
       grpc::ServerContext* context, const EventBook* request,
-      ::angzarr_client::proto::angzarr::Projection* response) override {
+      ::angzarr_client::proto::angzarr::v1::Projection* response) override {
     // Same behavior for speculative - just transform events.
     // ``Handle`` takes the same proto Projection type — call
     // through directly.

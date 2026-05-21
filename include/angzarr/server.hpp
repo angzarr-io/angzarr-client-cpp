@@ -46,15 +46,15 @@ inline constexpr uint16_t DEFAULT_PORT = 50052;
 /// where each kind exposes both ``""`` (gRPC overall) and a per-kind
 /// name to enable rolling-deploy targeting.
 inline constexpr const char* HEALTH_NAME_COMMAND_HANDLER =
-    "angzarr_client.proto.angzarr.CommandHandlerCoordinatorService";
+    "angzarr_client.proto.angzarr.v1.CommandHandlerCoordinatorService";
 inline constexpr const char* HEALTH_NAME_SAGA =
-    "angzarr_client.proto.angzarr.SagaCoordinatorService";
+    "angzarr_client.proto.angzarr.v1.SagaCoordinatorService";
 inline constexpr const char* HEALTH_NAME_PROCESS_MANAGER =
-    "angzarr_client.proto.angzarr.ProcessManagerCoordinatorService";
+    "angzarr_client.proto.angzarr.v1.ProcessManagerCoordinatorService";
 inline constexpr const char* HEALTH_NAME_PROJECTOR =
-    "angzarr_client.proto.angzarr.ProjectorCoordinatorService";
+    "angzarr_client.proto.angzarr.v1.ProjectorCoordinatorService";
 inline constexpr const char* HEALTH_NAME_UPCASTER =
-    "angzarr_client.proto.angzarr.UpcasterCoordinatorService";
+    "angzarr_client.proto.angzarr.v1.UpcasterCoordinatorService";
 
 /// Pure-data transport configuration; produced by :func:`config_from_env`
 /// and consumed by :func:`create_server`. Mirrors Py/Rs/Ja/C# shape.

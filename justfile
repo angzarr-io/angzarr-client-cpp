@@ -17,8 +17,17 @@
 
 set shell := ["bash", "-c"]
 
+# Reusable submodule-protection recipes (install-submodule-hooks,
+# check-submodules-clean). Source of truth: angzarr-project/submodule.just.
+import? 'angzarr-project/submodule.just'
+
 ROOT := `git rev-parse --show-toplevel`
-IMAGE := "ghcr.io/angzarr-io/angzarr-cpp:latest"
+# Container image is digest-pinned (project_supply_chain_digest_pinning).
+# `:latest` is kept on the LHS of `@` so `docker pull` still resolves the
+# float when an admin wants to spot-check what `latest` currently points at,
+# but the actual run uses the immutable sha256. Bumps to a newer image must
+# go through the per-repo bumper PR alongside the other languages'.
+IMAGE := "ghcr.io/angzarr-io/angzarr-cpp:latest@sha256:3c66dd0ffc7d2dd727c355d1b22c2741abce4d570baea4517c77fd5d40d97bfe"
 
 # Run just target in container (or directly if already in devcontainer).
 # Rootless docker: -u 0:0 maps to host user via subuid; writes to the
@@ -258,11 +267,21 @@ archive VERSION:
 # Idempotent build-artifact cleanup per cross-language convention.
 #
 # Wipes EVERY transient artifact the C++ toolchain emits so a subsequent
-# `just generate-proto-force && cmake --build build` produces a clean
-# tree from scratch. Safe to run repeatedly; never touches tracked
-# source. Mirrors the Java/C#/Go pilot `just clean` recipes.
+# `just generate-proto-force && just build` produces a clean tree from
+# scratch. Safe to run repeatedly; never touches tracked source. Mirrors
+# the Java/C#/Go pilot `just clean` recipes.
 clean:
+    # Some past mull/clang invocations have chmodded files inside the
+    # build tree to read-only (-r--r--r--), which then makes `rm -rf`
+    # fail half-way. Restore writability before the wipe. `|| true` so
+    # this stays no-op on a clean working tree where no build dirs exist.
+    find "{{ROOT}}" -maxdepth 1 \( -name 'build' -o -name 'build-*' -o -name 'cmake-build-*' \) \
+        -exec chmod -R u+w {} + 2>/dev/null || true
     # Primary build tree + variant trees from mutation/sanity iterations.
+    # `build/` itself is the parent (CMakePresets writes to
+    # build/container/ and build/container-mull/); pre-presets trees may
+    # still exist as bare build-iter*/build-mull*/build-regen/build-sanity/
+    # — the wildcard sweeps them all.
     rm -rf "{{ROOT}}/build" "{{ROOT}}"/build-* "{{ROOT}}"/cmake-build-*
     # CMake debris that can stray to repo root if cmake is invoked there.
     rm -rf "{{ROOT}}/CMakeFiles" "{{ROOT}}/Testing" "{{ROOT}}/.cache"

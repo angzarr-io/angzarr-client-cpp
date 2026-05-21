@@ -96,7 +96,7 @@ class ProcessManager {
       // Check for rejection notification
       if (helpers::type_url_matches(
               page.event().type_url(),
-              "angzarr_client.proto.angzarr.Notification")) {
+              "angzarr_client.proto.angzarr.v1.Notification")) {
         Notification notification;
         page.event().UnpackTo(&notification);
         auto response = dispatch_rejection(notification);

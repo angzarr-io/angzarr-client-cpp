@@ -11,38 +11,50 @@ default:
     @just --list
 
 # =============================================================================
+# CMake invocation model
+# =============================================================================
+# All recipes go through `CMakePresets.json` (configure/build/test presets).
+# Inline -D flags are forbidden here — adding a flag means editing the
+# preset so every recipe + every IDE picks it up consistently. The historic
+# bug this fixes: `just build` was running cmake with no -DCMAKE_BUILD_TYPE
+# so its first invocation produced a Debug-default cache, while
+# `just generate-proto` ran cmake with -DCMAKE_BUILD_TYPE=Release and
+# produced a Release cache. Whichever ran first won.
+#
+# Build dir convention: presets write to `build/container/` (and
+# `build/container-mull/` for the mutation preset). Host-side cmake is
+# never expected to touch this tree; if you ever see `CMakeCache.txt`
+# under a different root, run `just clean` and re-invoke through `just`.
+
+# =============================================================================
 # Proto generation — container-side executor.
 # =============================================================================
 # `just generate-proto` (host-side) is the canonical entrypoint and handles
 # the staleness check + container dispatch. Inside the container this recipe
 # runs the protoc invocation via CMake's `add_custom_command` rules by
-# building the `angzarr-client` target — that target's proto .pb.{cc,h}
-# prerequisites trigger the custom commands. We configure first so the
-# `build/` dir exists; the configure step is idempotent.
+# building the `proto_gen` aggregator target, whose `.pb.{cc,h}/.grpc.pb.{cc,h}`
+# prerequisites trigger the custom commands without compiling the library
+# or tests. Keeps the regen entrypoint outside the main build graph per
+# project_proto_generation_model.
 generate-proto-force:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    cmake -B build -DCMAKE_BUILD_TYPE=Release
-    # Drive the `proto_gen` aggregator custom-target (declared in
-    # CMakeLists.txt). It depends on all .pb.{cc,h}/.grpc.pb.{cc,h} outputs
-    # of `add_custom_command(OUTPUT … COMMAND protobuf::protoc …)` so the
-    # protoc invocations run WITHOUT compiling the library or tests. Keeps
-    # the regen entrypoint outside the main build graph per
-    # project_proto_generation_model.
-    cmake --build build --target proto_gen
+    cmake --preset default
+    cmake --build --preset proto-gen
 
 # Legacy in-container alias for proto generation (host-side `just proto`
 # routed here historically). Calls the canonical force recipe.
 proto: generate-proto-force
 
 configure:
-    cmake -B build -DCMAKE_BUILD_TYPE=Release
+    cmake --preset default
 
 build:
-    cmake -B build && cmake --build build
+    cmake --preset default
+    cmake --build --preset default
 
 test:
-    cmake -B build && cmake --build build && ctest --test-dir build --output-on-failure
+    cmake --preset default
+    cmake --build --preset default
+    ctest --preset default --test-dir build/container
 
 # Format check (clang-format, Google style)
 fmt:
@@ -69,18 +81,18 @@ mutation-test:
         exit 1
     fi
     echo "Running Mull mutation testing ($($MULL --version 2>&1 | head -1))..."
+    # The `mutation` preset pins clang-17 + the IR-frontend pass plugin
+    # + debug info. ccache is wired here (not in the preset) so it's only
+    # active when the ephemeral helper provides $CCACHE_DIR — keeps
+    # non-ephemeral mutation runs reproducible.
     CCACHE_ARGS=()
     if command -v ccache >/dev/null 2>&1 && [ -n "${CCACHE_DIR:-}" ]; then
         CCACHE_ARGS=(-DCMAKE_C_COMPILER_LAUNCHER=ccache
                      -DCMAKE_CXX_COMPILER_LAUNCHER=ccache)
     fi
-    # Build with clang-17 + debug info so mull can read LLVM IR
-    cmake -B build-mull -DCMAKE_C_COMPILER=clang-17 \
-        -DCMAKE_CXX_COMPILER=clang++-17 \
-        -DCMAKE_CXX_FLAGS="-g -grecord-command-line -w" \
-        "${CCACHE_ARGS[@]}"
-    cmake --build build-mull -j$(nproc) --target mutation_tests
-    $MULL --reporters Elements build-mull/mutation_tests 2>&1 || true
+    cmake --preset mutation "${CCACHE_ARGS[@]}"
+    cmake --build --preset mutation -j$(nproc)
+    $MULL --reporters Elements build/container-mull/mutation_tests 2>&1 || true
     echo "Mutation testing complete."
 
 # Create release archive with checksums

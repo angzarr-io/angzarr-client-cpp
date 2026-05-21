@@ -59,15 +59,15 @@ TEST(ServerConfig, HealthNamesAreCanonical) {
     // a probe agent see the same name regardless of which language
     // language the pod runs.
     EXPECT_STREQ(server::HEALTH_NAME_COMMAND_HANDLER,
-                 "angzarr_client.proto.angzarr.CommandHandlerCoordinatorService");
+                 "angzarr_client.proto.angzarr.v1.CommandHandlerCoordinatorService");
     EXPECT_STREQ(server::HEALTH_NAME_SAGA,
-                 "angzarr_client.proto.angzarr.SagaCoordinatorService");
+                 "angzarr_client.proto.angzarr.v1.SagaCoordinatorService");
     EXPECT_STREQ(server::HEALTH_NAME_PROCESS_MANAGER,
-                 "angzarr_client.proto.angzarr.ProcessManagerCoordinatorService");
+                 "angzarr_client.proto.angzarr.v1.ProcessManagerCoordinatorService");
     EXPECT_STREQ(server::HEALTH_NAME_PROJECTOR,
-                 "angzarr_client.proto.angzarr.ProjectorCoordinatorService");
+                 "angzarr_client.proto.angzarr.v1.ProjectorCoordinatorService");
     EXPECT_STREQ(server::HEALTH_NAME_UPCASTER,
-                 "angzarr_client.proto.angzarr.UpcasterCoordinatorService");
+                 "angzarr_client.proto.angzarr.v1.UpcasterCoordinatorService");
 }
 
 TEST(ResolveBindAddress, DefaultsToIPv6Wildcard) {

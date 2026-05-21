@@ -21,7 +21,7 @@ namespace angzarr {
 //
 // Defined here (rather than projector.hpp) so ProjectorDomainHandler
 // can reference it without a forward-declaration dance. The proto
-// message ``angzarr_client::proto::angzarr::Projection`` is a
+// message ``angzarr_client::proto::angzarr::v1::Projection`` is a
 // different type and is intentionally NOT aliased into ``namespace
 // angzarr`` (see :file:`proto_aliases.hpp`).
 

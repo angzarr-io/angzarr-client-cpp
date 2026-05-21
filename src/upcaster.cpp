@@ -8,21 +8,23 @@
 
 namespace angzarr {
 
-void run_upcaster_server(const std::string& name, int port, UpcasterRouter router) {
-    std::string server_address = "0.0.0.0:" + std::to_string(port);
+void run_upcaster_server(const std::string& name, int port,
+                         UpcasterRouter router) {
+  std::string server_address = "0.0.0.0:" + std::to_string(port);
 
-    grpc::reflection::InitProtoReflectionServerBuilderPlugin();
+  grpc::reflection::InitProtoReflectionServerBuilderPlugin();
 
-    UpcasterGrpcHandler handler(std::move(router));
+  UpcasterGrpcHandler handler(std::move(router));
 
-    grpc::ServerBuilder builder;
-    builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
-    builder.RegisterService(&handler);
+  grpc::ServerBuilder builder;
+  builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
+  builder.RegisterService(&handler);
 
-    std::unique_ptr<grpc::Server> server(builder.BuildAndStart());
-    std::cout << "Upcaster '" << name << "' listening on " << server_address << std::endl;
+  std::unique_ptr<grpc::Server> server(builder.BuildAndStart());
+  std::cout << "Upcaster '" << name << "' listening on " << server_address
+            << std::endl;
 
-    server->Wait();
+  server->Wait();
 }
 
 }  // namespace angzarr

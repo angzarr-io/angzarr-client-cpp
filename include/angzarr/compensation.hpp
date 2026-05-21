@@ -157,7 +157,7 @@ class CompensationContext {
  * Notification type name constant for type URL matching.
  */
 constexpr const char* kNotificationTypeName =
-    "angzarr_client.proto.angzarr.Notification";
+    "angzarr_client.proto.angzarr.v1.Notification";
 
 /**
  * Delegate compensation to the framework with emit_system_revocation=true.

@@ -28,7 +28,7 @@ constexpr const char* DEFAULT_EDITION = "";
 constexpr const char* META_ANGZARR_DOMAIN = "_angzarr";
 constexpr const char* PROJECTION_DOMAIN_PREFIX = "_projection";
 constexpr const char* PROJECTION_TYPE_URL =
-    "angzarr_client.proto.angzarr.Projection";
+    "angzarr_client.proto.angzarr.v1.Projection";
 constexpr const char* CORRELATION_ID_HEADER = "x-correlation-id";
 }  // namespace constants
 

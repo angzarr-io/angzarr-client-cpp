@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.21)
 
 # Read version from VERSION file
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" PROJECT_VERSION_STRING)
@@ -43,16 +43,16 @@ set(PROTO_DIR "${CMAKE_SOURCE_DIR}/angzarr-project/proto")
 set(PROTO_FILES
     ${PROTO_DIR}/google/api/annotations.proto
     ${PROTO_DIR}/google/api/http.proto
-    ${PROTO_DIR}/angzarr_client/proto/angzarr/types.proto
-    ${PROTO_DIR}/angzarr_client/proto/angzarr/command_handler.proto
-    ${PROTO_DIR}/angzarr_client/proto/angzarr/saga.proto
-    ${PROTO_DIR}/angzarr_client/proto/angzarr/projector.proto
-    ${PROTO_DIR}/angzarr_client/proto/angzarr/process_manager.proto
-    ${PROTO_DIR}/angzarr_client/proto/angzarr/query.proto
-    ${PROTO_DIR}/angzarr_client/proto/angzarr/stream.proto
-    ${PROTO_DIR}/angzarr_client/proto/angzarr/upcaster.proto
-    ${PROTO_DIR}/angzarr_client/proto/angzarr/meta.proto
-    ${PROTO_DIR}/angzarr_client/proto/angzarr/cloudevents.proto
+    ${PROTO_DIR}/angzarr_client/proto/angzarr/v1/types.proto
+    ${PROTO_DIR}/angzarr_client/proto/angzarr/v1/command_handler.proto
+    ${PROTO_DIR}/angzarr_client/proto/angzarr/v1/saga.proto
+    ${PROTO_DIR}/angzarr_client/proto/angzarr/v1/projector.proto
+    ${PROTO_DIR}/angzarr_client/proto/angzarr/v1/process_manager.proto
+    ${PROTO_DIR}/angzarr_client/proto/angzarr/v1/query.proto
+    ${PROTO_DIR}/angzarr_client/proto/angzarr/v1/stream.proto
+    ${PROTO_DIR}/angzarr_client/proto/angzarr/v1/upcaster.proto
+    ${PROTO_DIR}/angzarr_client/proto/angzarr/v1/meta.proto
+    ${PROTO_DIR}/angzarr_client/proto/angzarr/v1/cloudevents.proto
 )
 if(EXISTS "${PROTO_DIR}/sererr/v1/sererr.proto")
     list(APPEND PROTO_FILES "${PROTO_DIR}/sererr/v1/sererr.proto")
@@ -219,376 +219,105 @@ install(FILES
 enable_testing()
 find_package(GTest CONFIG REQUIRED)
 
-add_executable(rejection_handler_response_test
-    tests/rejection_handler_response_test.cpp
+# Test catalog. Every entry must be a file named tests/<name>.cpp linking
+# against angzarr-client + GTest::gtest + GTest::gtest_main. Splitting the
+# catalog by purpose keeps `mutation_tests`/`mutation_tests_d_cpp` source
+# lists in sync with the gtest target list without per-test repetition.
+#
+# ANGZARR_CLIENT_TESTS — every per-target gtest binary.
+# ANGZARR_MUTATION_TESTS — sources combined into the `mutation_tests`
+#   binary that mull-runner mutates. Excludes *_mirror tests (those are
+#   cross-language byte-parity checks that depend on absolute paths under
+#   the runner host; mull's IR rewrite makes them non-deterministic).
+# ANGZARR_MUTATION_D_CPP_TESTS — scoped Phase D-C++ subset for the
+#   `mutation_tests_d_cpp` binary; see the lifelong note in fix-log about
+#   the clang-17/abseil-20220623 segfault on pre-existing tests.
+set(ANGZARR_CLIENT_TESTS
+    rejection_handler_response_test
+    builder_test
+    error_introspection_test
+    router_test
+    compensation_test
+    compensation_mirror_test
+    error_defaults_mirror_test
+    state_building_test
+    component_router_test
+    helpers_test
+    destinations_test
+    error_codes_test
+    client_test
+    logger_test
+    readiness_test
+    testing_helpers_test
+    projector_unknown_test
+    identity_test
+    transport_test
+    server_test
+    unified_router_test
+    builder_convergence_test
+    retry_convergence_test
+    grpc_translator_test
+    helpers_convergence_test
 )
 
-target_link_libraries(rejection_handler_response_test
-    PRIVATE
-        angzarr-client
-        GTest::gtest
-        GTest::gtest_main
+set(ANGZARR_MUTATION_TESTS ${ANGZARR_CLIENT_TESTS})
+list(REMOVE_ITEM ANGZARR_MUTATION_TESTS
+    compensation_mirror_test
+    error_defaults_mirror_test
 )
 
-add_executable(builder_test
-    tests/builder_test.cpp
-)
-
-target_link_libraries(builder_test
-    PRIVATE
-        angzarr-client
-        GTest::gtest
-        GTest::gtest_main
-)
-
-add_executable(error_introspection_test
-    tests/error_introspection_test.cpp
-)
-
-target_link_libraries(error_introspection_test
-    PRIVATE
-        angzarr-client
-        GTest::gtest
-        GTest::gtest_main
-)
-
-add_executable(router_test
-    tests/router_test.cpp
-)
-
-target_link_libraries(router_test
-    PRIVATE
-        angzarr-client
-        GTest::gtest
-        GTest::gtest_main
-)
-
-add_executable(compensation_test
-    tests/compensation_test.cpp
-)
-
-target_link_libraries(compensation_test
-    PRIVATE
-        angzarr-client
-        GTest::gtest
-        GTest::gtest_main
-)
-
-add_executable(compensation_mirror_test
-    tests/compensation_mirror_test.cpp
-)
-
-target_link_libraries(compensation_mirror_test
-    PRIVATE
-        angzarr-client
-        GTest::gtest
-        GTest::gtest_main
-)
-
-add_executable(error_defaults_mirror_test
-    tests/error_defaults_mirror_test.cpp
-)
-
-target_link_libraries(error_defaults_mirror_test
-    PRIVATE
-        angzarr-client
-        GTest::gtest
-        GTest::gtest_main
-)
-
-add_executable(state_building_test
-    tests/state_building_test.cpp
-)
-
-target_link_libraries(state_building_test
-    PRIVATE
-        angzarr-client
-        GTest::gtest
-        GTest::gtest_main
-)
-
-add_executable(component_router_test
-    tests/component_router_test.cpp
-)
-
-target_link_libraries(component_router_test
-    PRIVATE
-        angzarr-client
-        GTest::gtest
-        GTest::gtest_main
-)
-
-add_executable(helpers_test
-    tests/helpers_test.cpp
-)
-
-target_link_libraries(helpers_test
-    PRIVATE
-        angzarr-client
-        GTest::gtest
-        GTest::gtest_main
-)
-
-add_executable(destinations_test
-    tests/destinations_test.cpp
-)
-
-target_link_libraries(destinations_test
-    PRIVATE
-        angzarr-client
-        GTest::gtest
-        GTest::gtest_main
-)
-
-add_executable(error_codes_test
-    tests/error_codes_test.cpp
-)
-
-target_link_libraries(error_codes_test
-    PRIVATE
-        angzarr-client
-        GTest::gtest
-        GTest::gtest_main
-)
-
-add_executable(client_test
-    tests/client_test.cpp
-)
-
-target_link_libraries(client_test
-    PRIVATE
-        angzarr-client
-        GTest::gtest
-        GTest::gtest_main
-)
-
-add_executable(logger_test
-    tests/logger_test.cpp
-)
-
-target_link_libraries(logger_test
-    PRIVATE
-        angzarr-client
-        GTest::gtest
-        GTest::gtest_main
-)
-
-add_executable(readiness_test
-    tests/readiness_test.cpp
-)
-
-target_link_libraries(readiness_test
-    PRIVATE
-        angzarr-client
-        GTest::gtest
-        GTest::gtest_main
-)
-
-add_executable(testing_helpers_test
-    tests/testing_helpers_test.cpp
-)
-
-target_link_libraries(testing_helpers_test
-    PRIVATE
-        angzarr-client
-        GTest::gtest
-        GTest::gtest_main
-)
-
-add_executable(projector_unknown_test
-    tests/projector_unknown_test.cpp
-)
-
-target_link_libraries(projector_unknown_test
-    PRIVATE
-        angzarr-client
-        GTest::gtest
-        GTest::gtest_main
-)
-
-# Spec HIGH-2.2 — cross-language compute_root parity (Phase D-C++).
-add_executable(identity_test
-    tests/identity_test.cpp
-)
-
-target_link_libraries(identity_test
-    PRIVATE
-        angzarr-client
-        GTest::gtest
-        GTest::gtest_main
-)
-
-# Spec HIGH-6.1 — transport-mode + endpoint resolver parity (Phase D-C++).
-add_executable(transport_test
-    tests/transport_test.cpp
-)
-
-target_link_libraries(transport_test
-    PRIVATE
-        angzarr-client
-        GTest::gtest
-        GTest::gtest_main
-)
-
-# Spec HIGH-5.1 — server module parity (Phase D-C++).
-add_executable(server_test
-    tests/server_test.cpp
-)
-
-target_link_libraries(server_test
-    PRIVATE
-        angzarr-client
-        GTest::gtest
-        GTest::gtest_main
-)
-
-# Spec HIGH-4.2/4.3/4.4 — unified Router aggregator + BuildError +
-# UpcasterRouter recognition (Phase D-C++).
-add_executable(unified_router_test
-    tests/unified_router_test.cpp
-)
-
-target_link_libraries(unified_router_test
-    PRIVATE
-        angzarr-client
-        GTest::gtest
-        GTest::gtest_main
-)
-
-# Spec HIGH-3.1/3.2 + MED-3.x — CommandBuilder spec convergence
-# (rootless ctors, code stamps, RFC3339 parser, UUID v4 gen, with_sync_mode).
-add_executable(builder_convergence_test
-    tests/builder_convergence_test.cpp
-)
-
-target_link_libraries(builder_convergence_test
-    PRIVATE
-        angzarr-client
-        GTest::gtest
-        GTest::gtest_main
-)
-
-# Spec HIGH-6.2 + MED/LOW — RetryPolicy value-returning execute,
-# on_retry, public compute_delay, FromStub seam (deferred per spec).
-add_executable(retry_convergence_test
-    tests/retry_convergence_test.cpp
-)
-
-target_link_libraries(retry_convergence_test
-    PRIVATE
-        angzarr-client
-        GTest::gtest
-        GTest::gtest_main
-)
-
-# Spec HIGH-1.3 + MED-1.8 + MED-4.10 — gRPC status translator and
-# Any-decode wrapping (Phase D-C++).
-add_executable(grpc_translator_test
-    tests/grpc_translator_test.cpp
-)
-
-target_link_libraries(grpc_translator_test
-    PRIVATE
-        angzarr-client
-        GTest::gtest
-        GTest::gtest_main
-)
-
-# Spec MED-2.x — helper parity (cache_key, routing_key, edition,
-# parse_timestamp, full_type_name/url, type_matches, try_unpack, unpack).
-add_executable(helpers_convergence_test
-    tests/helpers_convergence_test.cpp
-)
-
-target_link_libraries(helpers_convergence_test
-    PRIVATE
-        angzarr-client
-        GTest::gtest
-        GTest::gtest_main
+set(ANGZARR_MUTATION_D_CPP_TESTS
+    identity_test
+    transport_test
+    server_test
+    unified_router_test
+    builder_convergence_test
+    retry_convergence_test
+    grpc_translator_test
+    helpers_convergence_test
 )
 
 include(GoogleTest)
-gtest_discover_tests(rejection_handler_response_test)
-gtest_discover_tests(builder_test)
-gtest_discover_tests(error_introspection_test)
-gtest_discover_tests(router_test)
-gtest_discover_tests(compensation_test)
-gtest_discover_tests(compensation_mirror_test)
-gtest_discover_tests(error_defaults_mirror_test)
-gtest_discover_tests(state_building_test)
-gtest_discover_tests(component_router_test)
-gtest_discover_tests(helpers_test)
-gtest_discover_tests(destinations_test)
-gtest_discover_tests(error_codes_test)
-gtest_discover_tests(client_test)
-gtest_discover_tests(logger_test)
-gtest_discover_tests(readiness_test)
-gtest_discover_tests(testing_helpers_test)
-gtest_discover_tests(projector_unknown_test)
-gtest_discover_tests(identity_test)
-gtest_discover_tests(transport_test)
-gtest_discover_tests(server_test)
-gtest_discover_tests(unified_router_test)
-gtest_discover_tests(builder_convergence_test)
-gtest_discover_tests(retry_convergence_test)
-gtest_discover_tests(grpc_translator_test)
-gtest_discover_tests(helpers_convergence_test)
 
-# Mutation testing binary (all test sources combined for Mull)
-add_executable(mutation_tests
-    tests/rejection_handler_response_test.cpp
-    tests/builder_test.cpp
-    tests/error_introspection_test.cpp
-    tests/router_test.cpp
-    tests/compensation_test.cpp
-    tests/state_building_test.cpp
-    tests/component_router_test.cpp
-    tests/helpers_test.cpp
-    tests/destinations_test.cpp
-    tests/error_codes_test.cpp
-    tests/client_test.cpp
-    tests/logger_test.cpp
-    tests/readiness_test.cpp
-    tests/testing_helpers_test.cpp
-    tests/projector_unknown_test.cpp
-    tests/identity_test.cpp
-    tests/transport_test.cpp
-    tests/server_test.cpp
-    tests/unified_router_test.cpp
-    tests/builder_convergence_test.cpp
-    tests/retry_convergence_test.cpp
-    tests/grpc_translator_test.cpp
-    tests/helpers_convergence_test.cpp
-)
+foreach(test_name IN LISTS ANGZARR_CLIENT_TESTS)
+    add_executable(${test_name} tests/${test_name}.cpp)
+    target_link_libraries(${test_name}
+        PRIVATE
+            angzarr-client
+            GTest::gtest
+            GTest::gtest_main
+    )
+    # PRE_TEST defers enumeration until ctest runtime, after the binary
+    # exists. POST_BUILD (the default) tries to introspect the binary
+    # during configure on fresh trees where it does not yet exist.
+    gtest_discover_tests(${test_name} DISCOVERY_MODE PRE_TEST)
+endforeach()
 
+# Aggregated mull mutation target. `mutation_tests` is what
+# `just mutation-test` builds; the per-test binaries above stay around for
+# normal ctest runs.
+set(_mutation_sources)
+foreach(t IN LISTS ANGZARR_MUTATION_TESTS)
+    list(APPEND _mutation_sources tests/${t}.cpp)
+endforeach()
+add_executable(mutation_tests ${_mutation_sources})
 target_link_libraries(mutation_tests
     PRIVATE
         angzarr-client
         GTest::gtest
         GTest::gtest_main
 )
+unset(_mutation_sources)
 
-# Spec D-C++ Phase D: dedicated scoped mutation binary covering only the
-# new convergence test files. The mull-runner image (clang-17 + Ubuntu
-# 24.04 libabsl 20220623) segfaults on several pre-existing tests
-# (CommandRouterTest, AggregateRouterTest, ProcessManagerRouterTest)
-# during mull's warmup run — see fix-log discoveries. Splitting the
-# new tests into ``mutation_tests_d_cpp`` lets mull get a clean warmup
-# pass without depending on a container-image refresh.
-add_executable(mutation_tests_d_cpp
-    tests/identity_test.cpp
-    tests/transport_test.cpp
-    tests/server_test.cpp
-    tests/unified_router_test.cpp
-    tests/builder_convergence_test.cpp
-    tests/retry_convergence_test.cpp
-    tests/grpc_translator_test.cpp
-    tests/helpers_convergence_test.cpp
-)
-
+set(_mutation_d_cpp_sources)
+foreach(t IN LISTS ANGZARR_MUTATION_D_CPP_TESTS)
+    list(APPEND _mutation_d_cpp_sources tests/${t}.cpp)
+endforeach()
+add_executable(mutation_tests_d_cpp ${_mutation_d_cpp_sources})
 target_link_libraries(mutation_tests_d_cpp
     PRIVATE
         angzarr-client
         GTest::gtest
         GTest::gtest_main
 )
+unset(_mutation_d_cpp_sources)
