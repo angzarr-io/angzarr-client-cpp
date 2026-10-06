@@ -318,3 +318,12 @@ check: fmt
 
 # Cross-language alias — `just lint` placeholder (C++ uses fmt-check only).
 lint: fmt
+
+# === Code complexity (lizard, in container) ===
+# Per-function cyclomatic complexity via lizard (the best-maintained C++
+# cyclomatic analyzer; handles templates/modern C++ via tokenization where
+# pmccabe/cccc fail). Baked into the angzarr-cpp image. Defaults to
+# `src include`; pass paths/flags to scope, e.g. `just complexity -C 20 src`.
+# Report-only — never fails the build.
+complexity *ARGS:
+    just _container complexity {{ARGS}}

@@ -105,3 +105,11 @@ check: fmt
 
 # Cross-language alias — `just lint` placeholder (C++ uses fmt-check only).
 lint: fmt
+
+# Per-function cyclomatic complexity (lizard). Generated protobuf/gRPC code
+# and build output are excluded so numbers reflect hand-written source.
+# Single-quoted globs so the host shell doesn't expand them. Leading `-`
+# keeps this a report — it does NOT fail the build.
+LIZARD_EXCLUDES := "-x '*.pb.cc' -x '*.pb.h' -x '*.grpc.pb.cc' -x '*.grpc.pb.h' -x '*/build/*' -x '*/generated/*'"
+complexity *ARGS:
+    -lizard -l cpp -C 15 {{LIZARD_EXCLUDES}} {{ if ARGS == "" { "src include" } else { ARGS } }}

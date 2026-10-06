@@ -1,0 +1,60 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "default",
+      "displayName": "Container default (Release, system gcc)",
+      "description": "The configuration `just build` / `just test` / `just generate-proto-force` all share. Always runs inside ghcr.io/angzarr-io/angzarr-cpp:latest; expects /workspace to be the source root.",
+      "binaryDir": "${sourceDir}/build/container",
+      "generator": "Unix Makefiles",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "mutation",
+      "displayName": "Mull mutation (clang-17 + IR-frontend pass plugin)",
+      "description": "Built into a writable container-overlay path (/work/build-mull) inside _container-ephemeral; never persisted to host.",
+      "binaryDir": "${sourceDir}/build/container-mull",
+      "generator": "Unix Makefiles",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_C_COMPILER": "clang-17",
+        "CMAKE_CXX_COMPILER": "clang++-17",
+        "CMAKE_CXX_FLAGS": "-g -grecord-command-line -w"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "default",
+      "configurePreset": "default"
+    },
+    {
+      "name": "proto-gen",
+      "configurePreset": "default",
+      "targets": ["proto_gen"]
+    },
+    {
+      "name": "mutation",
+      "configurePreset": "mutation",
+      "targets": ["mutation_tests"]
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "default",
+      "configurePreset": "default",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

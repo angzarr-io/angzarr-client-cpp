@@ -11,6 +11,17 @@ RUN git config --system --add safe.directory '*' \
  && git config --system --add safe.directory '/workspace' \
  && git config --system --add safe.directory '/angzarr'
 
+# Cyclomatic complexity tooling: lizard (used by `just complexity`).
+# lizard is a Python tool; install python3 + pip alongside it. The upstream
+# angzarr-cpp base image (built from the missing build/images/Containerfile.cpp-base
+# referenced by examples-cpp's build-base-image.yml) does NOT ship lizard, so
+# it is baked in here for the devcontainer path. --break-system-packages is
+# needed under PEP 668 (Debian/Ubuntu externally-managed environments).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 python3-pip \
+ && rm -rf /var/lib/apt/lists/* \
+ && pip install --no-cache-dir --break-system-packages lizard
+
 # Mark as devcontainer for justfile detection
 ENV DEVCONTAINER=true
 
