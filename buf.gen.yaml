@@ -1,0 +1,8 @@
+version: v2
+inputs:
+  - directory: angzarr-project/proto
+plugins:
+  - remote: buf.build/protocolbuffers/cpp
+    out: proto
+  - remote: buf.build/grpc/cpp
+    out: proto
